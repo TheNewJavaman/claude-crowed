@@ -83,7 +83,17 @@ class McpReloadProxy:
 
         self._child_ready.set()
         self._reload_needed.clear()
-        print("[crowed-proxy] Server reloaded", file=sys.stderr, flush=True)
+
+        # Notify the client that tools may have changed so it re-fetches the list
+        notification = json.dumps({
+            "jsonrpc": "2.0",
+            "method": "notifications/tools/list_changed",
+        }).encode() + b"\n"
+        sys.stdout.buffer.write(notification)
+        sys.stdout.buffer.flush()
+
+        print("[crowed-proxy] Server reloaded, tool list change notified",
+              file=sys.stderr, flush=True)
 
     def _forward_to_child(self, data: bytes):
         self._child_ready.wait()
