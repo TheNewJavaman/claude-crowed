@@ -2,8 +2,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
+/dist/
+/build/
 *.egg
 
 # Virtual environment
@@ -17,6 +17,10 @@ build/
 .vscode/
 *.swp
 *.swo
+
+# Visualizer
+visualizer/node_modules/
+visualizer/dist/
 
 # OS
 .DS_Store

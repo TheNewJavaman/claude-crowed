@@ -80,7 +80,10 @@ def memory_search(
 @mcp.tool()
 def memory_read(id: str) -> dict:
     """Fetch the full content of a specific memory. This is the only tool that returns
-    content and the only tool that bumps last_accessed_at."""
+    content and the only tool that bumps last_accessed_at.
+
+    Returns link_suggestions: nearest neighbors not already linked. Call memory_link
+    for any that are related."""
     try:
         store = _get_store()
         result = store.read(id)
@@ -494,6 +497,11 @@ def main():
     # stats
     subparsers.add_parser("stats", help="Show memory statistics")
 
+    # visualize
+    viz_parser = subparsers.add_parser("visualize", help="Launch web visualizer")
+    viz_parser.add_argument("--port", type=int, default=4242)
+    viz_parser.add_argument("--no-browser", action="store_true")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -513,6 +521,9 @@ def main():
         cli_rebuild_embeddings()
     elif args.command == "stats":
         cli_stats()
+    elif args.command == "visualize":
+        from claude_crowed.visualizer import run_visualizer
+        run_visualizer(port=args.port, no_browser=args.no_browser)
 
 
 if __name__ == "__main__":

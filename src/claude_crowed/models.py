@@ -23,6 +23,7 @@ class MemoryFull(BaseModel):
     source: str
     is_deleted: bool
     links: list[dict[str, str]]  # [{id, title}, ...]
+    link_suggestions: list[dict] = []  # [{id, title, similarity}, ...]
 
 
 class MemoryVersion(BaseModel):

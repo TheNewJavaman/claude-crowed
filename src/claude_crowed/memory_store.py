@@ -165,6 +165,19 @@ class MemoryStore:
                 seen.add(lr["id"])
                 links.append({"id": lr["id"], "title": lr["title"]})
 
+        # Suggest new links (neighbors not already linked)
+        linked_ids = seen | {memory_id}
+        link_suggestions = []
+        try:
+            emb_row = self.db.execute(
+                "SELECT embedding FROM memory_embeddings WHERE id = ?", (memory_id,)
+            ).fetchone()
+            if emb_row is not None:
+                candidates = self._suggest_links(emb_row[0], exclude_id=memory_id, raw_embedding=True)
+                link_suggestions = [c for c in candidates if c["id"] not in linked_ids]
+        except Exception:
+            pass
+
         return MemoryFull(
             id=mem["id"],
             version=mem["version"],
@@ -176,6 +189,7 @@ class MemoryStore:
             source=mem["source"],
             is_deleted=bool(mem["is_deleted"]),
             links=links,
+            link_suggestions=link_suggestions,
         )
 
     def _check_duplicate(
@@ -214,11 +228,13 @@ class MemoryStore:
 
     def _suggest_links(
         self,
-        embedding: list[float],
+        embedding: list[float] | bytes,
         exclude_id: str,
         k: int = DEFAULT_LINK_SUGGEST_K,
+        raw_embedding: bool = False,
     ) -> list[dict]:
-        """Find nearest neighbors as link candidates for a newly stored memory."""
+        """Find nearest neighbors as link candidates for a memory."""
+        emb_bytes = embedding if raw_embedding else serialize_embedding(embedding)
         rows = self.db.execute(
             """
             SELECT id, distance
@@ -227,7 +243,7 @@ class MemoryStore:
                 AND k = ?
             ORDER BY distance
             """,
-            (serialize_embedding(embedding), k + 1),
+            (emb_bytes, k + 1),
         ).fetchall()
 
         suggestions = []

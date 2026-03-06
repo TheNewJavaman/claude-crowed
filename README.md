@@ -13,6 +13,7 @@ A persistent semantic memory system for Claude Code, built as an MCP server. Rep
 - **Export/import** for backup and portability
 - **Migration tool** to import existing CLAUDE.md and auto-memory files
 - **Hot-reload dev mode** via stdio proxy that watches for git commits
+- **Web visualizer** — force-directed graph of memories with search, detail browsing, and CRUD
 
 ## Install
 
@@ -51,7 +52,7 @@ This is your primary knowledge store.
 | Tool | Purpose |
 |---|---|
 | `memory_search` | Semantic search, returns titles only |
-| `memory_read` | Fetch full content of a memory |
+| `memory_read` | Fetch full content of a memory (with link suggestions) |
 | `memory_recall` | Search + read top results in one call (fewer round trips) |
 | `memory_store` | Store a new memory (with dedup check, returns link suggestions) |
 | `memory_update` | Create a new version of a memory |
@@ -89,7 +90,32 @@ claude-crowed rebuild-embeddings
 
 # Show stats
 claude-crowed stats
+
+# Launch web visualizer (opens browser)
+claude-crowed visualize [--port 4242] [--no-browser]
 ```
+
+### Visualizer
+
+The web visualizer shows all memories as a force-directed graph. Nodes are colored
+by age (blue = recent, gold = older) and sized by link count. Explicit links between
+memories are shown as edges.
+
+```bash
+uv sync --extra visualizer
+uv run claude-crowed visualize
+```
+
+The frontend is built automatically on launch if `visualizer/dist/` is missing or
+stale (requires npm). It skips the build if the dist is already up to date.
+
+Features:
+- Force-directed graph with age coloring and link-based clustering
+- Labels appear progressively as you zoom in (high-link nodes first)
+- Semantic search (press `/` to focus)
+- Click any node to browse its content, metadata, and links
+- Delete/restore memories from the detail panel
+- Navigate between linked memories
 
 ## Architecture
 
