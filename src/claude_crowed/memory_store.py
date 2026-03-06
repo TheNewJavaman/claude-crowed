@@ -615,6 +615,55 @@ class MemoryStore:
             for r in rows
         ]
 
+    def suggest_links_batch(self, max_link_count: int = 2, suggest_k: int = 3) -> list[dict]:
+        """Find memories with few links and suggest new ones for each."""
+        # Get active memories with link count below threshold
+        rows = self.db.execute(
+            """
+            SELECT id, title, link_count FROM (
+                SELECT m.id, m.title, m.updated_at,
+                    (SELECT COUNT(*) FROM memory_links WHERE source_id = m.id) as link_count
+                FROM memories m
+                WHERE m.is_deleted = 0
+                  AND m.id NOT IN (SELECT parent_id FROM memories WHERE parent_id IS NOT NULL)
+            )
+            WHERE link_count <= ?
+            ORDER BY link_count ASC, updated_at DESC
+            """,
+            (max_link_count,),
+        ).fetchall()
+
+        results = []
+        for row in rows:
+            mid = row["id"]
+            # Get existing linked IDs
+            linked = {
+                r["target_id"]
+                for r in self.db.execute(
+                    "SELECT target_id FROM memory_links WHERE source_id = ?", (mid,)
+                ).fetchall()
+            }
+            linked.add(mid)
+
+            # Get embedding
+            emb_row = self.db.execute(
+                "SELECT embedding FROM memory_embeddings WHERE id = ?", (mid,)
+            ).fetchone()
+            if emb_row is None:
+                continue
+
+            candidates = self._suggest_links(emb_row[0], exclude_id=mid, k=suggest_k + len(linked), raw_embedding=True)
+            suggestions = [c for c in candidates if c["id"] not in linked][:suggest_k]
+            if suggestions:
+                results.append({
+                    "id": mid,
+                    "title": row["title"],
+                    "link_count": row["link_count"],
+                    "suggestions": suggestions,
+                })
+
+        return results
+
     def export_all(self) -> ExportData:
         memories = self.db.execute("SELECT * FROM memories").fetchall()
         links = self.db.execute("SELECT * FROM memory_links").fetchall()

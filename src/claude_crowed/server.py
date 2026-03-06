@@ -365,6 +365,21 @@ def memory_threshold(value: float | None = None) -> dict:
 
 
 @mcp.tool()
+def memory_suggest_links(max_link_count: int = 2, suggest_k: int = 3) -> list[dict] | dict:
+    """Find sparsely-linked memories and suggest new links for each.
+
+    Returns memories that have at most max_link_count links, with up to suggest_k
+    suggested neighbors per memory. Review the suggestions and call memory_link
+    for any pairs that are genuinely related."""
+    try:
+        store = _get_store()
+        return store.suggest_links_batch(max_link_count=max_link_count, suggest_k=suggest_k)
+    except Exception as e:
+        logger.error("memory_suggest_links failed", exc_info=True)
+        return {"error": f"Suggest links failed: {e}"}
+
+
+@mcp.tool()
 def memory_stats() -> dict:
     """Return summary statistics about the memory store."""
     try:
