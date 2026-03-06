@@ -50,7 +50,7 @@ def _get_store() -> MemoryStore:
 
 
 @app.get("/api/graph")
-def get_graph(similarity_k: int = 3):
+def get_graph(similarity_k: int = 3, min_similarity: float = 0.25):
     store = _get_store()
     db = store.db
 
@@ -94,10 +94,12 @@ def get_graph(similarity_k: int = 3):
             nid = row[0]
             if nid == mid or nid not in active_ids:
                 continue
+            similarity = 1.0 - row[1]
+            if similarity < min_similarity:
+                continue
             pair = (min(mid, nid), max(mid, nid))
             if pair not in seen:
                 seen.add(pair)
-                similarity = 1.0 - row[1]
                 links.append({"source": mid, "target": nid, "similarity": similarity})
 
     return {"nodes": nodes, "links": links}

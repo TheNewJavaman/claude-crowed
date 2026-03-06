@@ -25,6 +25,23 @@ export default function GraphView({
 }: Props) {
   const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink>>(undefined)
 
+  // Compute edge count per node for sizing
+  const edgeCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const link of links) {
+      const src = typeof link.source === 'string' ? link.source : link.source.id
+      const tgt = typeof link.target === 'string' ? link.target : link.target.id
+      counts.set(src, (counts.get(src) ?? 0) + 1)
+      counts.set(tgt, (counts.get(tgt) ?? 0) + 1)
+    }
+    return counts
+  }, [links])
+
+  const getRadius = useCallback(
+    (node: GraphNode) => 4 + Math.min((edgeCounts.get(node.id) ?? 0) * 3, 24),
+    [edgeCounts]
+  )
+
   // Compute date range for age coloring
   const { oldest, newest } = useMemo(() => {
     if (nodes.length === 0) return { oldest: '', newest: '' }
@@ -55,7 +72,7 @@ export default function GraphView({
     if (charge) (charge as { strength: (n: number) => void }).strength(-1400)
     fg.d3Force('gravityX', forceX(0).strength(0.05))
     fg.d3Force('gravityY', forceY(0).strength(0.05))
-    fg.d3Force('collide', forceCollide(14).strength(1).iterations(6))
+    fg.d3Force('collide', forceCollide((node: GraphNode) => getRadius(node) + 8).strength(1).iterations(6))
 
     const link = fg.d3Force('link')
     if (link) {
@@ -63,7 +80,7 @@ export default function GraphView({
       fl.distance(60)
       fl.strength(0.3)
     }
-  }, [])
+  }, [getRadius])
 
   // Fit to screen on first load
   useEffect(() => {
@@ -87,8 +104,8 @@ export default function GraphView({
   )
 
   const nodeVal = useCallback(
-    () => 2,
-    []
+    (node: GraphNode) => 1 + Math.min((edgeCounts.get(node.id) ?? 0) * 3, 30),
+    [edgeCounts]
   )
 
   const nodeLabel = useCallback(
@@ -103,7 +120,7 @@ export default function GraphView({
       const y = node.y ?? 0
       const isSelected = node.id === selectedId
       const isHighlighted = highlightIds.has(node.id)
-      const baseRadius = 6
+      const baseRadius = getRadius(node)
 
       const color = isSelected
         ? '#58a6ff'
@@ -133,7 +150,7 @@ export default function GraphView({
         ctx.stroke()
       }
     },
-    [selectedId, highlightIds, oldest, newest]
+    [selectedId, highlightIds, oldest, newest, getRadius]
   )
 
   // Labels drawn in a separate pass after all nodes, with z-ordering
@@ -151,13 +168,17 @@ export default function GraphView({
       for (const node of nodes) {
         const isSelected = node.id === selectedId
         const isHighlighted = highlightIds.has(node.id)
-        const showThreshold = 0.6
+        const importance = edgeCounts.get(node.id) ?? 0
+        const showThreshold = importance >= 7 ? 0.15 : Math.max(0.5, 1.5 - importance * 0.25)
 
         if (isSelected || isHighlighted || globalScale > showThreshold) {
+          const t = (globalScale - showThreshold) / Math.max(showThreshold, 0.5)
           const alpha = isSelected || isHighlighted
             ? 1.0
-            : Math.min(1.0, (globalScale - showThreshold) / 0.8)
-          const priority = isSelected ? 1000 : isHighlighted ? 500 : 0
+            : importance >= 7
+              ? 1.0
+              : Math.min(1.0, t * t)
+          const priority = isSelected ? 1000 : isHighlighted ? 500 : importance
           entries.push({ node, alpha, priority, isSelected, isHighlighted })
         }
       }
@@ -178,7 +199,7 @@ export default function GraphView({
       for (const { node, alpha, isSelected, isHighlighted } of entries) {
         const x = node.x ?? 0
         const y = node.y ?? 0
-        const baseRadius = 6
+        const baseRadius = getRadius(node)
 
         const label = node.title.length > maxChars
           ? node.title.slice(0, maxChars - 1) + '…'
@@ -215,7 +236,7 @@ export default function GraphView({
         ctx.fillText(label, x, labelY)
       }
     },
-    [nodes, selectedId, highlightIds]
+    [nodes, selectedId, highlightIds, edgeCounts, getRadius]
   )
 
   const linkColor = useCallback(

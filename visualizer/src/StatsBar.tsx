@@ -30,9 +30,6 @@ export default function StatsBar({ stats, nodeCount, edgeCount }: Props) {
       }}
     >
       <span>
-        <strong style={{ color: TEXT }}>{stats.total_memories}</strong> memories
-      </span>
-      <span>
         <strong style={{ color: TEXT }}>{nodeCount}</strong> nodes
       </span>
       <span>
