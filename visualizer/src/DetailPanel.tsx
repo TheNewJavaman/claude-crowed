@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { deleteMemory, fetchMemory, undeleteMemory } from './api'
 import {
-  ACCENT,
   BORDER,
   DANGER,
   PANEL_BG,
@@ -193,51 +192,6 @@ export default function DetailPanel({
             />
             <MetaRow label="ID" value={memory.id} mono />
           </div>
-
-          {/* Links */}
-          {memory.links.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div
-                style={{
-                  color: TEXT_DIM,
-                  fontSize: 11,
-                  textTransform: 'uppercase',
-                  letterSpacing: 1,
-                  marginBottom: 8,
-                }}
-              >
-                Linked Memories ({memory.links.length})
-              </div>
-              {memory.links.map((link) => (
-                <button
-                  key={link.id}
-                  onClick={() => onNavigate(link.id)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 12px',
-                    marginBottom: 4,
-                    background: '#1c2128',
-                    border: `1px solid ${BORDER}`,
-                    borderRadius: 6,
-                    color: ACCENT,
-                    fontSize: 13,
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    textDecoration: 'none',
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.borderColor = ACCENT)
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.borderColor = BORDER)
-                  }
-                >
-                  {link.title}
-                </button>
-              ))}
-            </div>
-          )}
 
           {/* Actions */}
           <div

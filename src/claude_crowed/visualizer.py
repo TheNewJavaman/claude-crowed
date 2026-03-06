@@ -50,15 +50,14 @@ def _get_store() -> MemoryStore:
 
 
 @app.get("/api/graph")
-def get_graph():
+def get_graph(similarity_k: int = 3):
     store = _get_store()
     db = store.db
 
     # All active memories (latest versions, not deleted)
     memories = db.execute(
         """
-        SELECT m.id, m.title, m.created_at, m.updated_at, m.source,
-            (SELECT COUNT(*) FROM memory_links WHERE source_id = m.id) as link_count
+        SELECT m.id, m.title, m.created_at, m.updated_at, m.source
         FROM memories m
         WHERE m.is_deleted = 0
           AND m.id NOT IN (SELECT parent_id FROM memories WHERE parent_id IS NOT NULL)
@@ -72,24 +71,34 @@ def get_graph():
             "created_at": m["created_at"],
             "updated_at": m["updated_at"],
             "source": m["source"],
-            "link_count": m["link_count"],
         }
         for m in memories
     ]
 
     active_ids = {m["id"] for m in memories}
 
-    # Explicit links (deduplicated to one per pair)
-    all_links = db.execute("SELECT source_id, target_id FROM memory_links").fetchall()
+    # Dynamic similarity edges via nearest-neighbor lookup
     links = []
     seen: set[tuple[str, str]] = set()
-    for lnk in all_links:
-        src, tgt = lnk["source_id"], lnk["target_id"]
-        if src in active_ids and tgt in active_ids:
-            pair = (min(src, tgt), max(src, tgt))
+    for mid in active_ids:
+        emb_row = db.execute(
+            "SELECT embedding FROM memory_embeddings WHERE id = ?", (mid,)
+        ).fetchone()
+        if emb_row is None:
+            continue
+        neighbors = db.execute(
+            "SELECT id, distance FROM memory_embeddings WHERE embedding MATCH ? AND k = ? ORDER BY distance",
+            (emb_row[0], similarity_k + 1),
+        ).fetchall()
+        for row in neighbors:
+            nid = row[0]
+            if nid == mid or nid not in active_ids:
+                continue
+            pair = (min(mid, nid), max(mid, nid))
             if pair not in seen:
                 seen.add(pair)
-                links.append({"source": src, "target": tgt})
+                similarity = 1.0 - row[1]
+                links.append({"source": mid, "target": nid, "similarity": similarity})
 
     return {"nodes": nodes, "links": links}
 
@@ -120,18 +129,6 @@ def delete_memory(memory_id: str):
 def undelete_memory(memory_id: str):
     store = _get_store()
     return store.undelete(memory_id)
-
-
-@app.post("/api/link")
-def link_memories(id_a: str = Query(...), id_b: str = Query(...)):
-    store = _get_store()
-    return store.link(id_a, id_b)
-
-
-@app.post("/api/unlink")
-def unlink_memories(id_a: str = Query(...), id_b: str = Query(...)):
-    store = _get_store()
-    return store.unlink(id_a, id_b)
 
 
 @app.get("/api/stats")

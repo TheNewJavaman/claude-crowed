@@ -181,7 +181,7 @@ export default function App() {
       <StatsBar
         stats={stats}
         nodeCount={nodes.length}
-        linkCount={links.length}
+        edgeCount={links.length}
       />
     </div>
   )

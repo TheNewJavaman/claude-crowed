@@ -69,18 +69,13 @@ def test_memory_timeline_tool():
     assert len(result["items"]) == 2
 
 
-def test_memory_link_unlink_tool():
+def test_memory_related_tool():
     a = server.memory_store("A", "Content A")
     b = server.memory_store("B", "Content B")
 
-    result = server.memory_link(a["id"], b["id"])
-    assert result["status"] == "ok"
-
     related = server.memory_related(a["id"])
-    assert len(related) == 1
-
-    result = server.memory_unlink(a["id"], b["id"])
-    assert result["status"] == "ok"
+    assert isinstance(related, list)
+    assert len(related) >= 1
 
 
 def test_memory_history_tool():

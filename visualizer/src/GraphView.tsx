@@ -55,10 +55,7 @@ export default function GraphView({
     if (charge) (charge as { strength: (n: number) => void }).strength(-1400)
     fg.d3Force('gravityX', forceX(0).strength(0.05))
     fg.d3Force('gravityY', forceY(0).strength(0.05))
-    fg.d3Force('collide', forceCollide((node: GraphNode) => {
-      const r = 6 + Math.min(node.link_count * 2, 16)
-      return r + 8
-    }).strength(1).iterations(6))
+    fg.d3Force('collide', forceCollide(14).strength(1).iterations(6))
 
     const link = fg.d3Force('link')
     if (link) {
@@ -90,7 +87,7 @@ export default function GraphView({
   )
 
   const nodeVal = useCallback(
-    (node: GraphNode) => 2 + Math.min(node.link_count * 2, 20),
+    () => 2,
     []
   )
 
@@ -106,7 +103,7 @@ export default function GraphView({
       const y = node.y ?? 0
       const isSelected = node.id === selectedId
       const isHighlighted = highlightIds.has(node.id)
-      const baseRadius = 6 + Math.min(node.link_count * 2, 16)
+      const baseRadius = 6
 
       const color = isSelected
         ? '#58a6ff'
@@ -154,14 +151,13 @@ export default function GraphView({
       for (const node of nodes) {
         const isSelected = node.id === selectedId
         const isHighlighted = highlightIds.has(node.id)
-        const importance = node.link_count
-        const showThreshold = Math.max(0.15, 0.6 - importance * 0.15)
+        const showThreshold = 0.6
 
         if (isSelected || isHighlighted || globalScale > showThreshold) {
           const alpha = isSelected || isHighlighted
             ? 1.0
             : Math.min(1.0, (globalScale - showThreshold) / 0.8)
-          const priority = isSelected ? 1000 : isHighlighted ? 500 : importance
+          const priority = isSelected ? 1000 : isHighlighted ? 500 : 0
           entries.push({ node, alpha, priority, isSelected, isHighlighted })
         }
       }
@@ -182,7 +178,7 @@ export default function GraphView({
       for (const { node, alpha, isSelected, isHighlighted } of entries) {
         const x = node.x ?? 0
         const y = node.y ?? 0
-        const baseRadius = 6 + Math.min(node.link_count * 2, 16)
+        const baseRadius = 6
 
         const label = node.title.length > maxChars
           ? node.title.slice(0, maxChars - 1) + '…'

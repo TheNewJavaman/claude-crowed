@@ -13,7 +13,7 @@ def test_schema_init_idempotent():
     ).fetchall()
     table_names = [t["name"] for t in tables]
     assert "memories" in table_names
-    assert "memory_links" in table_names
+    assert "settings" in table_names
     db.close()
 
 

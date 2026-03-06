@@ -24,13 +24,6 @@ class TestCRUDLifecycle:
         assert result.version == 1
         assert result.is_deleted is False
 
-    def test_store_returns_link_suggestions(self, store):
-        _store(store, "Python debugging tips", "Use pdb for debugging Python code")
-        result = store.store("Python async patterns", "Use asyncio for concurrent Python")
-        assert "id" in result
-        assert "link_suggestions" in result
-        assert isinstance(result["link_suggestions"], list)
-
     def test_update_creates_new_version(self, store):
         mid1 = _store(store, "Original", "Original content")
         mid2 = store.update(mid1, title="Updated Title")
@@ -249,57 +242,19 @@ class TestVersioning:
         assert mid1 not in ids
 
 
-class TestLinks:
-    def test_link_and_related(self, store):
+class TestRelated:
+    def test_related_returns_results(self, store):
         mid_a = _store(store, "Memory A", "Content A")
         mid_b = _store(store, "Memory B", "Content B")
-
-        result = store.link(mid_a, mid_b)
-        assert result["status"] == "ok"
 
         related = store.related(mid_a)
-        assert len(related) == 1
-        assert related[0].id == mid_b
+        assert isinstance(related, list)
+        # With mock embeddings, at least mid_b should appear as a neighbor
+        assert len(related) >= 1
 
-        related_b = store.related(mid_b)
-        assert len(related_b) == 1
-        assert related_b[0].id == mid_a
-
-    def test_unlink(self, store):
-        mid_a = _store(store, "Memory A", "Content A")
-        mid_b = _store(store, "Memory B", "Content B")
-        store.link(mid_a, mid_b)
-
-        store.unlink(mid_a, mid_b)
-        assert store.related(mid_a) == []
-        assert store.related(mid_b) == []
-
-    def test_link_migration_on_update(self, store):
-        mid_a = _store(store, "Memory A", "Content A")
-        mid_b = _store(store, "Memory B", "Content B")
-        store.link(mid_a, mid_b)
-
-        mid_a2 = store.update(mid_a, title="Memory A Updated")
-
-        related = store.related(mid_a2)
-        assert len(related) == 1
-        assert related[0].id == mid_b
-
-    def test_link_count_in_search(self, store):
-        mid_a = _store(store, "Memory A Links", "Content A")
-        mid_b = _store(store, "Memory B Links", "Content B")
-        mid_c = _store(store, "Memory C Links", "Content C")
-        store.link(mid_a, mid_b)
-        store.link(mid_a, mid_c)
-
-        results = store.search("Memory Links")
-        a_result = next((r for r in results if r.id == mid_a), None)
-        assert a_result is not None
-        assert a_result.link_count == 2
-
-    def test_link_nonexistent(self, store):
-        mid = _store(store, "Real", "Content")
-        result = store.link(mid, "nonexistent-id")
+    def test_related_not_found(self, store):
+        result = store.related("nonexistent-id")
+        assert isinstance(result, dict)
         assert "error" in result
 
 
@@ -395,16 +350,13 @@ class TestExportImport:
     def test_round_trip(self, store, db):
         mid1 = _store(store, "Export A", "Content A")
         mid2 = _store(store, "Export B", "Content B")
-        store.link(mid1, mid2)
 
         data = store.export_all()
         assert len(data.memories) == 2
-        assert len(data.links) == 2  # bidirectional
 
         # Clear and reimport
         result = store.import_data(data, overwrite=True)
         assert result["imported_memories"] == 2
-        assert result["imported_links"] == 2
 
         # Verify data survived
         mem = store.read(mid1)
@@ -422,7 +374,6 @@ class TestStats:
     def test_stats_counts(self, store):
         mid1 = _store(store, "A", "Content A")
         mid2 = _store(store, "B", "Content B")
-        store.link(mid1, mid2)
 
         mid1_v2 = store.update(mid1, title="A Updated")
         _store(store, "C", "Content C")
@@ -433,4 +384,3 @@ class TestStats:
         assert stats.total_memories == 3  # A(v2), B, C — not D (deleted)
         assert stats.total_deleted == 1  # D
         assert stats.total_versions == 5  # A(v1), A(v2), B, C, D
-        assert stats.total_links >= 1

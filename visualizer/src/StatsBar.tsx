@@ -4,10 +4,10 @@ import type { Stats } from './types'
 interface Props {
   stats: Stats | null
   nodeCount: number
-  linkCount: number
+  edgeCount: number
 }
 
-export default function StatsBar({ stats, nodeCount, linkCount }: Props) {
+export default function StatsBar({ stats, nodeCount, edgeCount }: Props) {
   if (!stats) return null
 
   const formatSize = (bytes: number) => {
@@ -36,10 +36,7 @@ export default function StatsBar({ stats, nodeCount, linkCount }: Props) {
         <strong style={{ color: TEXT }}>{nodeCount}</strong> nodes
       </span>
       <span>
-        <strong style={{ color: TEXT }}>{linkCount}</strong> edges
-      </span>
-      <span>
-        <strong style={{ color: TEXT }}>{stats.total_links}</strong> links
+        <strong style={{ color: TEXT }}>{edgeCount}</strong> edges
       </span>
       <span>
         <strong style={{ color: TEXT }}>{stats.total_deleted}</strong> deleted

@@ -25,15 +25,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(
     embedding float[{EMBEDDING_DIMENSION}]
 );
 
-CREATE TABLE IF NOT EXISTS memory_links (
-    source_id TEXT NOT NULL,
-    target_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    PRIMARY KEY (source_id, target_id),
-    FOREIGN KEY (source_id) REFERENCES memories(id),
-    FOREIGN KEY (target_id) REFERENCES memories(id)
-);
-
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -42,8 +33,6 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at);
 CREATE INDEX IF NOT EXISTS idx_memories_deleted ON memories(is_deleted);
 CREATE INDEX IF NOT EXISTS idx_memories_parent ON memories(parent_id);
-CREATE INDEX IF NOT EXISTS idx_links_source ON memory_links(source_id);
-CREATE INDEX IF NOT EXISTS idx_links_target ON memory_links(target_id);
 """
 
 

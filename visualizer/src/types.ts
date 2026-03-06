@@ -4,7 +4,6 @@ export interface GraphNode {
   created_at: string
   updated_at: string
   source: string
-  link_count: number
   // Set by force graph
   x?: number
   y?: number
@@ -13,6 +12,7 @@ export interface GraphNode {
 export interface GraphLink {
   source: string | GraphNode
   target: string | GraphNode
+  similarity?: number
 }
 
 export interface GraphData {
@@ -30,7 +30,6 @@ export interface MemoryFull {
   last_accessed_at: string
   source: string
   is_deleted: boolean
-  links: { id: string; title: string }[]
 }
 
 export interface SearchResult {
@@ -39,14 +38,12 @@ export interface SearchResult {
   similarity: number
   created_at: string
   updated_at: string
-  link_count: number
 }
 
 export interface Stats {
   total_memories: number
   total_deleted: number
   total_versions: number
-  total_links: number
   oldest_memory: string | null
   newest_memory: string | null
   db_size_bytes: number

@@ -36,26 +36,27 @@ cd visualizer && npm run dev  # Vite dev server, proxies /api to :4242
 
 ## Architecture
 
-MCP server exposing 17 tools for persistent semantic memory. Claude stores/retrieves knowledge across sessions via these tools.
+MCP server exposing 14 tools for persistent semantic memory. Claude stores/retrieves knowledge across sessions via these tools.
 
 ### Data Flow
 
-1. **Store**: Text → `embed_document("search_document: {title}\n{content}")` → 768-dim vector → SQLite + sqlite-vec. Returns `{id, link_suggestions}` — nearest neighbors to encourage linking.
+1. **Store**: Text → `embed_document("search_document: {title}\n{content}")` → 768-dim vector → SQLite + sqlite-vec. Returns `{id}`.
 2. **Search**: Query → `embed_query("search_query: {query}")` → vec0 `MATCH` → ranked results (titles only)
 3. **Read**: Fetch full content by ID (only tool that bumps `last_accessed_at`)
 4. **Recall**: Combines search + read in one call. Returns full content for top-k results + titles for the rest. Preferred over search+read for fewer round trips.
+5. **Related**: Finds semantically similar memories via embedding nearest-neighbor lookup (dynamic, no stored links).
 
 The `search_document:`/`search_query:` prefixes are required by the nomic-embed-text-v1.5 model.
 
 ### Key Modules
 
 - **`server.py`** — FastMCP tool definitions + CLI entry point. Tools are thin wrappers around `MemoryStore` methods. `_init_server()` starts background model loading, creates DB, takes startup backup.
-- **`memory_store.py`** — Core CRUD, search, recall, versioning, links, import/export. All business logic lives here. `store()` always returns a dict (`{id, link_suggestions}` on success, `{error}` on failure). Other methods return Pydantic models or `dict` with `"error"` key on failure.
+- **`memory_store.py`** — Core CRUD, search, recall, versioning, import/export. All business logic lives here. `store()` returns a dict (`{id}` on success, `{error}` on failure). Other methods return Pydantic models or `dict` with `"error"` key on failure.
 - **`embedding.py`** — Lazy model loading in a background thread (`start_loading()` + `threading.Event`). Model loads during MCP handshake so first tool call doesn't block. CPU-only by default.
 - **`db.py`** — Schema definition, `get_connection()` loads sqlite-vec extension. WAL mode, foreign keys enabled.
 - **`models.py`** — Pydantic response models.
 - **`proxy.py`** — `McpReloadProxy`: stdio proxy that watches `.git/refs/heads/` for commits and restarts the child MCP server, replaying the MCP init handshake. Used by `claude-crowed dev`.
-- **`visualizer.py`** — FastAPI backend for the web visualizer. Serves graph data (nodes + explicit links), memory detail, search, delete/undelete, link/unlink. Auto-builds frontend if `dist/` is missing or stale. Serves the built frontend from `visualizer/dist/`.
+- **`visualizer.py`** — FastAPI backend for the web visualizer. Serves graph data (nodes + dynamic similarity edges from nearest-neighbor queries), memory detail, search, delete/undelete. Auto-builds frontend if `dist/` is missing or stale. Serves the built frontend from `visualizer/dist/`.
 - **`visualizer/`** (project root) — React + Vite + TypeScript frontend. Uses `react-force-graph-2d` for force-directed graph rendering. Dark theme. Search bar, detail panel on click, delete/restore actions.
 
 ### sqlite-vec Quirks
@@ -66,7 +67,7 @@ The `search_document:`/`search_query:` prefixes are required by the nomic-embed-
 
 ### Versioning Model
 
-Updates create a new row with `parent_id` pointing to the old version. The old version's embedding is removed from the index. Links are migrated to the new version. History is reconstructed via recursive CTE walking `parent_id` chains in both directions.
+Updates create a new row with `parent_id` pointing to the old version. The old version's embedding is removed from the index. History is reconstructed via recursive CTE walking `parent_id` chains in both directions.
 
 ### Deduplication
 

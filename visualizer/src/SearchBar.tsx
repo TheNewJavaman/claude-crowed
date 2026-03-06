@@ -143,8 +143,7 @@ export default function SearchBar({ onSelect }: Props) {
             >
               <div style={{ fontWeight: 500 }}>{r.title}</div>
               <div style={{ color: TEXT_DIM, fontSize: 11, marginTop: 2 }}>
-                similarity: {(r.similarity * 100).toFixed(1)}% · {r.link_count}{' '}
-                links
+                similarity: {(r.similarity * 100).toFixed(1)}%
               </div>
             </button>
           ))}

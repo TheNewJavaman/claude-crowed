@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from claude_crowed.config import (
-    DEFAULT_LINK_SUGGEST_K,
     DEFAULT_RECALL_READ_K,
     DEFAULT_SEARCH_K,
     DEFAULT_TIMELINE_K,
@@ -91,11 +90,6 @@ class MemoryStore:
             if not include_deleted and mem["is_deleted"]:
                 continue
 
-            link_count = self.db.execute(
-                "SELECT COUNT(*) as cnt FROM memory_links WHERE source_id = ?",
-                (mem["id"],),
-            ).fetchone()["cnt"]
-
             results.append(
                 MemorySearchResult(
                     id=mem["id"],
@@ -105,7 +99,6 @@ class MemoryStore:
                     updated_at=mem["updated_at"],
                     last_accessed_at=mem["last_accessed_at"],
                     is_deleted=bool(mem["is_deleted"]),
-                    link_count=link_count,
                 )
             )
         return results
@@ -144,40 +137,6 @@ class MemoryStore:
         )
         self.db.commit()
 
-        link_rows = self.db.execute(
-            """
-            SELECT m.id, m.title
-            FROM memory_links ml
-            JOIN memories m ON m.id = CASE
-                WHEN ml.source_id = ? THEN ml.target_id
-                ELSE ml.source_id
-            END
-            WHERE ml.source_id = ? OR ml.target_id = ?
-            """,
-            (memory_id, memory_id, memory_id),
-        ).fetchall()
-
-        # Deduplicate (bidirectional links produce pairs)
-        seen = set()
-        links = []
-        for lr in link_rows:
-            if lr["id"] != memory_id and lr["id"] not in seen:
-                seen.add(lr["id"])
-                links.append({"id": lr["id"], "title": lr["title"]})
-
-        # Suggest new links (neighbors not already linked)
-        linked_ids = seen | {memory_id}
-        link_suggestions = []
-        try:
-            emb_row = self.db.execute(
-                "SELECT embedding FROM memory_embeddings WHERE id = ?", (memory_id,)
-            ).fetchone()
-            if emb_row is not None:
-                candidates = self._suggest_links(emb_row[0], exclude_id=memory_id, raw_embedding=True)
-                link_suggestions = [c for c in candidates if c["id"] not in linked_ids]
-        except Exception:
-            pass
-
         return MemoryFull(
             id=mem["id"],
             version=mem["version"],
@@ -188,8 +147,6 @@ class MemoryStore:
             last_accessed_at=now,
             source=mem["source"],
             is_deleted=bool(mem["is_deleted"]),
-            links=links,
-            link_suggestions=link_suggestions,
         )
 
     def _check_duplicate(
@@ -225,45 +182,6 @@ class MemoryStore:
                     "similarity": round(similarity, 4),
                 }
         return None
-
-    def _suggest_links(
-        self,
-        embedding: list[float] | bytes,
-        exclude_id: str,
-        k: int = DEFAULT_LINK_SUGGEST_K,
-        raw_embedding: bool = False,
-    ) -> list[dict]:
-        """Find nearest neighbors as link candidates for a memory."""
-        emb_bytes = embedding if raw_embedding else serialize_embedding(embedding)
-        rows = self.db.execute(
-            """
-            SELECT id, distance
-            FROM memory_embeddings
-            WHERE embedding MATCH ?
-                AND k = ?
-            ORDER BY distance
-            """,
-            (emb_bytes, k + 1),
-        ).fetchall()
-
-        suggestions = []
-        for row in rows:
-            mid = row[0]
-            if mid == exclude_id:
-                continue
-            mem = self.db.execute(
-                "SELECT id, title FROM memories WHERE id = ? AND is_deleted = 0",
-                (mid,),
-            ).fetchone()
-            if mem:
-                suggestions.append({
-                    "id": mem["id"],
-                    "title": mem["title"],
-                    "similarity": round(1.0 - row[1], 4),
-                })
-            if len(suggestions) >= k:
-                break
-        return suggestions
 
     def store(
         self,
@@ -310,10 +228,7 @@ class MemoryStore:
             (memory_id, serialize_embedding(embedding)),
         )
         self.db.commit()
-
-        # Suggest related memories for linking
-        link_suggestions = self._suggest_links(embedding, exclude_id=memory_id)
-        return {"id": memory_id, "link_suggestions": link_suggestions}
+        return {"id": memory_id}
 
     def update(
         self,
@@ -372,24 +287,6 @@ class MemoryStore:
             "INSERT INTO memory_embeddings (id, embedding) VALUES (?, ?)",
             (new_id, serialize_embedding(embedding)),
         )
-
-        # Migrate links
-        old_links = self.db.execute(
-            "SELECT source_id, target_id, created_at FROM memory_links WHERE source_id = ? OR target_id = ?",
-            (memory_id, memory_id),
-        ).fetchall()
-
-        for link in old_links:
-            if link["source_id"] == memory_id:
-                self.db.execute(
-                    "INSERT OR IGNORE INTO memory_links (source_id, target_id, created_at) VALUES (?, ?, ?)",
-                    (new_id, link["target_id"], link["created_at"]),
-                )
-            if link["target_id"] == memory_id:
-                self.db.execute(
-                    "INSERT OR IGNORE INTO memory_links (source_id, target_id, created_at) VALUES (?, ?, ?)",
-                    (link["source_id"], new_id, link["created_at"]),
-                )
 
         self.db.commit()
         return new_id
@@ -530,8 +427,7 @@ class MemoryStore:
 
         rows = self.db.execute(
             f"""
-            SELECT m.*,
-                (SELECT COUNT(*) FROM memory_links WHERE source_id = m.id) as link_count
+            SELECT m.*
             FROM memories m
             WHERE {where}
             ORDER BY m.updated_at DESC
@@ -548,7 +444,6 @@ class MemoryStore:
                 updated_at=r["updated_at"],
                 last_accessed_at=r["last_accessed_at"],
                 is_deleted=bool(r["is_deleted"]),
-                link_count=r["link_count"],
             )
             for r in rows
         ]
@@ -556,122 +451,59 @@ class MemoryStore:
         next_cursor = items[-1].updated_at if len(items) == k else None
         return TimelineResponse(items=items, next_cursor=next_cursor)
 
-    def link(self, id_a: str, id_b: str) -> dict:
-        for mid in (id_a, id_b):
-            exists = self.db.execute(
-                "SELECT 1 FROM memories WHERE id = ?", (mid,)
-            ).fetchone()
-            if not exists:
-                return {"error": f"Memory not found: {mid}"}
-
-        now = now_utc()
-        self.db.execute(
-            "INSERT OR IGNORE INTO memory_links (source_id, target_id, created_at) VALUES (?, ?, ?)",
-            (id_a, id_b, now),
-        )
-        self.db.execute(
-            "INSERT OR IGNORE INTO memory_links (source_id, target_id, created_at) VALUES (?, ?, ?)",
-            (id_b, id_a, now),
-        )
-        self.db.commit()
-        return {"status": "ok"}
-
-    def unlink(self, id_a: str, id_b: str) -> dict:
-        self.db.execute(
-            "DELETE FROM memory_links WHERE source_id = ? AND target_id = ?",
-            (id_a, id_b),
-        )
-        self.db.execute(
-            "DELETE FROM memory_links WHERE source_id = ? AND target_id = ?",
-            (id_b, id_a),
-        )
-        self.db.commit()
-        return {"status": "ok"}
-
-    def related(self, memory_id: str) -> list[RelatedMemory] | dict:
+    def related(self, memory_id: str, k: int = 5) -> list[RelatedMemory] | dict:
+        """Find semantically related memories via embedding nearest-neighbor search."""
         mem = self.db.execute(
             "SELECT 1 FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
         if mem is None:
             return {"error": f"Memory not found: {memory_id}"}
 
+        emb_row = self.db.execute(
+            "SELECT embedding FROM memory_embeddings WHERE id = ?", (memory_id,)
+        ).fetchone()
+        if emb_row is None:
+            return []
+
         rows = self.db.execute(
             """
-            SELECT m.id, m.title, m.updated_at, m.last_accessed_at
-            FROM memory_links ml
-            JOIN memories m ON m.id = ml.target_id
-            WHERE ml.source_id = ?
+            SELECT id, distance
+            FROM memory_embeddings
+            WHERE embedding MATCH ?
+                AND k = ?
+            ORDER BY distance
             """,
-            (memory_id,),
-        ).fetchall()
-
-        return [
-            RelatedMemory(
-                id=r["id"],
-                title=r["title"],
-                updated_at=r["updated_at"],
-                last_accessed_at=r["last_accessed_at"],
-            )
-            for r in rows
-        ]
-
-    def suggest_links_batch(self, max_link_count: int = 2, suggest_k: int = 3) -> list[dict]:
-        """Find memories with few links and suggest new ones for each."""
-        # Get active memories with link count below threshold
-        rows = self.db.execute(
-            """
-            SELECT id, title, link_count FROM (
-                SELECT m.id, m.title, m.updated_at,
-                    (SELECT COUNT(*) FROM memory_links WHERE source_id = m.id) as link_count
-                FROM memories m
-                WHERE m.is_deleted = 0
-                  AND m.id NOT IN (SELECT parent_id FROM memories WHERE parent_id IS NOT NULL)
-            )
-            WHERE link_count <= ?
-            ORDER BY link_count ASC, updated_at DESC
-            """,
-            (max_link_count,),
+            (emb_row[0], k + 1),
         ).fetchall()
 
         results = []
         for row in rows:
-            mid = row["id"]
-            # Get existing linked IDs
-            linked = {
-                r["target_id"]
-                for r in self.db.execute(
-                    "SELECT target_id FROM memory_links WHERE source_id = ?", (mid,)
-                ).fetchall()
-            }
-            linked.add(mid)
-
-            # Get embedding
-            emb_row = self.db.execute(
-                "SELECT embedding FROM memory_embeddings WHERE id = ?", (mid,)
-            ).fetchone()
-            if emb_row is None:
+            mid = row[0]
+            if mid == memory_id:
                 continue
-
-            candidates = self._suggest_links(emb_row[0], exclude_id=mid, k=suggest_k + len(linked), raw_embedding=True)
-            suggestions = [c for c in candidates if c["id"] not in linked][:suggest_k]
-            if suggestions:
-                results.append({
-                    "id": mid,
-                    "title": row["title"],
-                    "link_count": row["link_count"],
-                    "suggestions": suggestions,
-                })
-
+            m = self.db.execute(
+                "SELECT id, title, updated_at, last_accessed_at FROM memories WHERE id = ? AND is_deleted = 0",
+                (mid,),
+            ).fetchone()
+            if m:
+                results.append(
+                    RelatedMemory(
+                        id=m["id"],
+                        title=m["title"],
+                        updated_at=m["updated_at"],
+                        last_accessed_at=m["last_accessed_at"],
+                    )
+                )
+            if len(results) >= k:
+                break
         return results
 
     def export_all(self) -> ExportData:
         memories = self.db.execute("SELECT * FROM memories").fetchall()
-        links = self.db.execute("SELECT * FROM memory_links").fetchall()
 
         return ExportData(
             exported_at=now_utc(),
             memories=[dict(m) for m in memories],
-            links=[dict(lnk) for lnk in links],
         )
 
     def import_data(
@@ -680,11 +512,9 @@ class MemoryStore:
         overwrite: bool = False,
     ) -> dict:
         imported_memories = 0
-        imported_links = 0
         skipped = 0
 
         if overwrite:
-            self.db.execute("DELETE FROM memory_links")
             self.db.execute("DELETE FROM memory_embeddings")
             self.db.execute("DELETE FROM memories")
             self.db.commit()
@@ -736,25 +566,9 @@ class MemoryStore:
                 (row["id"], serialize_embedding(embedding)),
             )
 
-        for lnk in data.links:
-            if not overwrite:
-                exists = self.db.execute(
-                    "SELECT 1 FROM memory_links WHERE source_id = ? AND target_id = ?",
-                    (lnk["source_id"], lnk["target_id"]),
-                ).fetchone()
-                if exists:
-                    continue
-
-            self.db.execute(
-                "INSERT OR IGNORE INTO memory_links (source_id, target_id, created_at) VALUES (?, ?, ?)",
-                (lnk["source_id"], lnk["target_id"], lnk["created_at"]),
-            )
-            imported_links += 1
-
         self.db.commit()
         return {
             "imported_memories": imported_memories,
-            "imported_links": imported_links,
             "skipped": skipped,
         }
 
@@ -775,10 +589,6 @@ class MemoryStore:
             "SELECT COUNT(*) as cnt FROM memories"
         ).fetchone()["cnt"]
 
-        total_links = self.db.execute(
-            "SELECT COUNT(*) / 2 as cnt FROM memory_links"
-        ).fetchone()["cnt"]
-
         oldest = self.db.execute(
             "SELECT MIN(created_at) as val FROM memories WHERE is_deleted = 0"
         ).fetchone()["val"]
@@ -791,7 +601,6 @@ class MemoryStore:
             total_memories=total_memories,
             total_deleted=total_deleted,
             total_versions=total_versions,
-            total_links=total_links,
             oldest_memory=oldest,
             newest_memory=newest,
             db_size_bytes=0,  # Overridden by caller for real DB

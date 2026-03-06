@@ -10,8 +10,6 @@ MAX_BACKUP_COUNT = 30
 MAX_DELETIONS_PER_SESSION = 5
 DUPLICATE_SIMILARITY_THRESHOLD = 0.85
 DEFAULT_RECALL_READ_K = 5
-DEFAULT_LINK_SUGGEST_K = 3
-
 DB_DIR = Path("~/.local/share/claude-crowed").expanduser()
 DB_PATH = DB_DIR / "memories.db"
 BACKUP_DIR = DB_DIR / "backups"

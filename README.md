@@ -7,7 +7,7 @@ A persistent semantic memory system for Claude Code, built as an MCP server. Rep
 - **Semantic search** via sentence-transformers (nomic-embed-text-v1.5) + sqlite-vec
 - **Versioned memories** with full history (update creates a new version, old versions preserved)
 - **Soft-delete** with rate limiting (5 per session) and undo
-- **Bidirectional links** between related memories
+- **Dynamic "see also"** via embedding nearest-neighbor lookup (no manual linking needed)
 - **Duplicate detection** with adjustable similarity threshold
 - **Timeline browsing** with cursor-based pagination
 - **Export/import** for backup and portability
@@ -38,16 +38,6 @@ This is your primary knowledge store.
 ### Search Discipline
 - At the START of every task, call `memory_recall` (or `memory_search`) with relevant keywords.
 - Mid-task: whenever you encounter unfamiliar code, patterns, or errors, search again.
-
-### When to Store
-- After diagnosing a root cause ("the problem was X because Y").
-- When you discover a gotcha or workaround.
-- After every git commit, for novel decisions or patterns.
-- Store as you go, not at the end — mid-task insights are most valuable.
-
-### Linking
-- After storing or reading a memory, review the `link_suggestions` in the response.
-  Call `memory_link` for any that are related.
 ```
 
 ## Usage
@@ -57,17 +47,15 @@ This is your primary knowledge store.
 | Tool | Purpose |
 |---|---|
 | `memory_search` | Semantic search, returns titles only |
-| `memory_read` | Fetch full content of a memory (with link suggestions) |
+| `memory_read` | Fetch full content of a memory |
 | `memory_recall` | Search + read top results in one call (fewer round trips) |
-| `memory_store` | Store a new memory (with dedup check, returns link suggestions) |
+| `memory_store` | Store a new memory (with dedup check) |
 | `memory_update` | Create a new version of a memory |
 | `memory_delete` | Soft-delete (rate-limited, reversible) |
 | `memory_undelete` | Restore a deleted memory |
 | `memory_history` | View all versions of a memory |
 | `memory_timeline` | Browse chronologically with pagination |
-| `memory_link` | Create bidirectional link between memories |
-| `memory_unlink` | Remove a link |
-| `memory_related` | List linked memories |
+| `memory_related` | Find semantically similar memories (dynamic nearest-neighbor) |
 | `memory_export` | Export all data to JSON |
 | `memory_import` | Import from JSON export |
 | `memory_migrate` | Discover and split existing memory files for migration |
@@ -103,8 +91,8 @@ claude-crowed visualize [--port 4242] [--no-browser]
 ### Visualizer
 
 The web visualizer shows all memories as a force-directed graph. Nodes are colored
-by age (blue = recent, gold = older) and sized by link count. Explicit links between
-memories are shown as edges.
+by age (blue = recent, gold = older). Similarity edges connect semantically related
+memories via dynamic nearest-neighbor lookup.
 
 ```bash
 uv sync --extra visualizer
@@ -115,12 +103,11 @@ The frontend is built automatically on launch if `visualizer/dist/` is missing o
 stale (requires npm). It skips the build if the dist is already up to date.
 
 Features:
-- Force-directed graph with age coloring and link-based clustering
-- Labels appear progressively as you zoom in (high-link nodes first)
+- Force-directed graph with age coloring and similarity-based clustering
+- Labels appear progressively as you zoom in
 - Semantic search (press `/` to focus)
-- Click any node to browse its content, metadata, and links
+- Click any node to browse its content and metadata
 - Delete/restore memories from the detail panel
-- Navigate between linked memories
 
 ## Architecture
 

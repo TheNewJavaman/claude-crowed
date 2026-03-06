@@ -39,24 +39,6 @@ export async function undeleteMemory(
   return res.json()
 }
 
-export async function linkMemories(
-  idA: string,
-  idB: string
-): Promise<{ status?: string; error?: string }> {
-  const params = new URLSearchParams({ id_a: idA, id_b: idB })
-  const res = await fetch(`${BASE}/api/link?${params}`, { method: 'POST' })
-  return res.json()
-}
-
-export async function unlinkMemories(
-  idA: string,
-  idB: string
-): Promise<{ status?: string; error?: string }> {
-  const params = new URLSearchParams({ id_a: idA, id_b: idB })
-  const res = await fetch(`${BASE}/api/unlink?${params}`, { method: 'POST' })
-  return res.json()
-}
-
 export async function fetchStats(): Promise<Stats> {
   const res = await fetch(`${BASE}/api/stats`)
   return res.json()

@@ -80,10 +80,7 @@ def memory_search(
 @mcp.tool()
 def memory_read(id: str) -> dict:
     """Fetch the full content of a specific memory. This is the only tool that returns
-    content and the only tool that bumps last_accessed_at.
-
-    Returns link_suggestions: nearest neighbors not already linked. Call memory_link
-    for any that are related."""
+    content and the only tool that bumps last_accessed_at."""
     try:
         store = _get_store()
         result = store.read(id)
@@ -129,11 +126,7 @@ def memory_store(
     sessions -- novel insights, decisions, findings, patterns, or debugging solutions.
     Title (max 150 chars) must be a complete, descriptive thought, not a label. Another
     instance of you should judge relevance from the title alone. Content max 1500 chars;
-    split larger ideas into multiple linked memories. Source: manual, conversation, or auto.
-
-    Returns the new memory ID and link_suggestions (nearest existing memories). Review
-    the suggestions and call memory_link for any that are related -- building a rich link
-    graph improves future retrieval.
+    split larger ideas into multiple memories. Source: manual, conversation, or auto.
 
     Rejects near-duplicates by default (use memory_threshold to view/adjust sensitivity).
     Set force=True to skip the duplicate check entirely."""
@@ -224,33 +217,11 @@ def memory_timeline(
 
 
 @mcp.tool()
-def memory_link(id_a: str, id_b: str) -> dict:
-    """Create a bidirectional 'see also' link between two memories."""
+def memory_related(id: str, k: int = 5) -> list[dict] | dict:
+    """Find semantically related memories via embedding similarity. Returns titles only."""
     try:
         store = _get_store()
-        return store.link(id_a, id_b)
-    except Exception as e:
-        logger.error("memory_link failed", exc_info=True)
-        return {"error": f"Link failed: {e}"}
-
-
-@mcp.tool()
-def memory_unlink(id_a: str, id_b: str) -> dict:
-    """Remove a bidirectional link between two memories."""
-    try:
-        store = _get_store()
-        return store.unlink(id_a, id_b)
-    except Exception as e:
-        logger.error("memory_unlink failed", exc_info=True)
-        return {"error": f"Unlink failed: {e}"}
-
-
-@mcp.tool()
-def memory_related(id: str) -> list[dict] | dict:
-    """List all memories linked to a given memory. Returns titles only."""
-    try:
-        store = _get_store()
-        result = store.related(id)
+        result = store.related(id, k=k)
         if isinstance(result, dict):
             return result
         return [r.model_dump() for r in result]
@@ -279,7 +250,6 @@ def memory_export(path: str | None = None) -> dict:
         return {
             "path": str(export_path),
             "memory_count": len(data.memories),
-            "link_count": len(data.links),
         }
     except Exception as e:
         logger.error("memory_export failed", exc_info=True)
@@ -365,21 +335,6 @@ def memory_threshold(value: float | None = None) -> dict:
 
 
 @mcp.tool()
-def memory_suggest_links(max_link_count: int = 2, suggest_k: int = 3) -> list[dict] | dict:
-    """Find sparsely-linked memories and suggest new links for each.
-
-    Returns memories that have at most max_link_count links, with up to suggest_k
-    suggested neighbors per memory. Review the suggestions and call memory_link
-    for any pairs that are genuinely related."""
-    try:
-        store = _get_store()
-        return store.suggest_links_batch(max_link_count=max_link_count, suggest_k=suggest_k)
-    except Exception as e:
-        logger.error("memory_suggest_links failed", exc_info=True)
-        return {"error": f"Suggest links failed: {e}"}
-
-
-@mcp.tool()
 def memory_stats() -> dict:
     """Return summary statistics about the memory store."""
     try:
@@ -414,7 +369,7 @@ def cli_export(args):
 
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     Path(output).write_text(data.model_dump_json(indent=2))
-    print(f"Exported {len(data.memories)} memories, {len(data.links)} links to {output}")
+    print(f"Exported {len(data.memories)} memories to {output}")
 
 
 def cli_import(args):
@@ -433,7 +388,6 @@ def cli_import(args):
     result = store.import_data(data, overwrite=args.overwrite)
     print(
         f"Imported {result['imported_memories']} memories, "
-        f"{result['imported_links']} links, "
         f"skipped {result['skipped']}"
     )
 
@@ -471,7 +425,6 @@ def cli_stats():
     print(f"Active memories:  {stats.total_memories}")
     print(f"Deleted memories: {stats.total_deleted}")
     print(f"Total versions:   {stats.total_versions}")
-    print(f"Total links:      {stats.total_links}")
     print(f"Oldest memory:    {stats.oldest_memory or '(none)'}")
     print(f"Newest memory:    {stats.newest_memory or '(none)'}")
     print(f"Database size:    {stats.db_size_bytes:,} bytes")
