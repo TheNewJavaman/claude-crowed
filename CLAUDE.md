@@ -55,7 +55,7 @@ The `search_document:`/`search_query:` prefixes are required by the nomic-embed-
 - **`db.py`** — Schema definition, `get_connection()` loads sqlite-vec extension. WAL mode, foreign keys enabled.
 - **`models.py`** — Pydantic response models.
 - **`proxy.py`** — `McpReloadProxy`: stdio proxy that watches `.git/refs/heads/` for commits and restarts the child MCP server, replaying the MCP init handshake. Used by `claude-crowed dev`.
-- **`visualizer.py`** — FastAPI backend for the web visualizer. Serves graph data (nodes + explicit links + similarity edges from vec0 nearest-neighbor queries), memory detail, search, delete/undelete, link/unlink. Serves the built frontend from `visualizer/dist/`.
+- **`visualizer.py`** — FastAPI backend for the web visualizer. Serves graph data (nodes + explicit links), memory detail, search, delete/undelete, link/unlink. Auto-builds frontend if `dist/` is missing or stale. Serves the built frontend from `visualizer/dist/`.
 - **`visualizer/`** (project root) — React + Vite + TypeScript frontend. Uses `react-force-graph-2d` for force-directed graph rendering. Dark theme. Search bar, detail panel on click, delete/restore actions.
 
 ### sqlite-vec Quirks

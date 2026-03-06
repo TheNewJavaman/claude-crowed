@@ -38,10 +38,15 @@ This is your primary knowledge store.
 ### Search Discipline
 - At the START of every task, call `memory_recall` (or `memory_search`) with relevant keywords.
 - Mid-task: whenever you encounter unfamiliar code, patterns, or errors, search again.
-- After completing a task that produced a novel insight, call `memory_store`.
+
+### When to Store
+- After diagnosing a root cause ("the problem was X because Y").
+- When you discover a gotcha or workaround.
+- After every git commit, for novel decisions or patterns.
+- Store as you go, not at the end — mid-task insights are most valuable.
 
 ### Linking
-- After storing a memory, review the `link_suggestions` in the response.
+- After storing or reading a memory, review the `link_suggestions` in the response.
   Call `memory_link` for any that are related.
 ```
 
