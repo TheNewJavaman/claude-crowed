@@ -50,7 +50,7 @@ def _get_store() -> MemoryStore:
 
 
 @app.get("/api/graph")
-def get_graph(similarity_k: int = 3, min_similarity: float = 0.25):
+def get_graph(similarity_k: int = 3, min_similarity: float = 0.3):
     store = _get_store()
     db = store.db
 
