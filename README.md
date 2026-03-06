@@ -22,17 +22,8 @@ uv sync
 
 ## Setup
 
-Add to your Claude Code MCP config (`~/.claude.json`):
-
-```json
-{
-  "mcpServers": {
-    "claude-crowed": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/claude-crowed", "claude-crowed"]
-    }
-  }
-}
+```bash
+claude mcp add --scope user claude-crowed -- uv run --directory /path/to/claude-crowed claude-crowed
 ```
 
 Then add the memory directive to your `~/.claude/CLAUDE.md` so Claude knows to use it:
