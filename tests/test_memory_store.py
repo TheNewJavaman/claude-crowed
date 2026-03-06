@@ -5,9 +5,17 @@ import pytest
 from claude_crowed.config import MAX_DELETIONS_PER_SESSION
 
 
+def _store(store, title, content, **kwargs):
+    """Helper: store a memory and return the ID string."""
+    result = store.store(title, content, **kwargs)
+    assert isinstance(result, dict)
+    assert "id" in result, f"Expected 'id' in result, got: {result}"
+    return result["id"]
+
+
 class TestCRUDLifecycle:
     def test_store_and_read(self, store):
-        mid = store.store("Test Title", "Test content here")
+        mid = _store(store, "Test Title", "Test content here")
         assert isinstance(mid, str)
 
         result = store.read(mid)
@@ -16,8 +24,15 @@ class TestCRUDLifecycle:
         assert result.version == 1
         assert result.is_deleted is False
 
+    def test_store_returns_link_suggestions(self, store):
+        _store(store, "Python debugging tips", "Use pdb for debugging Python code")
+        result = store.store("Python async patterns", "Use asyncio for concurrent Python")
+        assert "id" in result
+        assert "link_suggestions" in result
+        assert isinstance(result["link_suggestions"], list)
+
     def test_update_creates_new_version(self, store):
-        mid1 = store.store("Original", "Original content")
+        mid1 = _store(store, "Original", "Original content")
         mid2 = store.update(mid1, title="Updated Title")
         assert isinstance(mid2, str)
         assert mid2 != mid1
@@ -28,7 +43,7 @@ class TestCRUDLifecycle:
         assert result.version == 2
 
     def test_update_content_only(self, store):
-        mid1 = store.store("Title", "Old content")
+        mid1 = _store(store, "Title", "Old content")
         mid2 = store.update(mid1, content="New content")
 
         result = store.read(mid2)
@@ -36,7 +51,7 @@ class TestCRUDLifecycle:
         assert result.content == "New content"
 
     def test_delete_and_undelete(self, store):
-        mid = store.store("To Delete", "Content")
+        mid = _store(store, "To Delete", "Content")
 
         result = store.delete(mid)
         assert result["status"] == "ok"
@@ -51,7 +66,7 @@ class TestCRUDLifecycle:
         assert mem.is_deleted is False
 
     def test_cannot_update_deleted(self, store):
-        mid = store.store("Title", "Content")
+        mid = _store(store, "Title", "Content")
         store.delete(mid)
         result = store.update(mid, title="New Title")
         assert isinstance(result, dict)
@@ -60,9 +75,9 @@ class TestCRUDLifecycle:
 
 class TestSearch:
     def test_search_returns_results(self, store):
-        store.store("Python debugging tips", "Use pdb for debugging Python code")
-        store.store("Rust ownership model", "Rust uses ownership for memory safety")
-        store.store("Python async patterns", "Use asyncio for concurrent Python code")
+        _store(store, "Python debugging tips", "Use pdb for debugging Python code")
+        _store(store, "Rust ownership model", "Rust uses ownership for memory safety")
+        _store(store, "Python async patterns", "Use asyncio for concurrent Python code")
 
         results = store.search("Python programming")
         assert len(results) > 0
@@ -72,7 +87,7 @@ class TestSearch:
             assert results[i].similarity >= results[i + 1].similarity
 
     def test_search_excludes_deleted_by_default(self, store):
-        mid = store.store("Secret", "Hidden content")
+        mid = _store(store, "Secret", "Hidden content")
         store.delete(mid)
 
         results = store.search("Secret")
@@ -85,8 +100,8 @@ class TestSearch:
         appear. But if we store two, delete one, and search, the non-deleted one
         should appear and the deleted one should not (even with include_deleted)
         because its embedding is gone."""
-        mid1 = store.store("Secret Alpha", "Hidden content alpha")
-        mid2 = store.store("Secret Beta", "Hidden content beta")
+        mid1 = _store(store, "Secret Alpha", "Hidden content alpha")
+        mid2 = _store(store, "Secret Beta", "Hidden content beta")
         store.delete(mid1)
 
         # Without include_deleted, mid1 won't appear (embedding removed)
@@ -101,7 +116,7 @@ class TestSearch:
         assert mid2 in ids
 
     def test_search_does_not_bump_last_accessed(self, store):
-        mid = store.store("Test", "Content")
+        mid = _store(store, "Test", "Content")
         mem_before = store.read(mid)
         time.sleep(0.01)
 
@@ -114,11 +129,35 @@ class TestSearch:
         assert mem["last_accessed_at"] == mem_before.last_accessed_at
 
 
+class TestRecall:
+    def test_recall_returns_full_content(self, store):
+        _store(store, "Python debugging tips", "Use pdb for debugging Python code")
+        _store(store, "Rust ownership model", "Rust uses ownership for memory safety")
+
+        result = store.recall("Python debugging")
+        assert "memories" in result
+        assert "also_matched" in result
+        assert len(result["memories"]) > 0
+        # Full memories should have content
+        assert "content" in result["memories"][0]
+        assert "title" in result["memories"][0]
+
+    def test_recall_limits_reads(self, store):
+        for i in range(10):
+            _store(store, f"Topic {i} unique content", f"Detail about topic {i}")
+
+        result = store.recall("Topic unique", read_k=3)
+        assert len(result["memories"]) <= 3
+        # Remaining matches in also_matched
+        total = len(result["memories"]) + len(result["also_matched"])
+        assert total > 3
+
+
 class TestTimeline:
     def test_timeline_ordering(self, store):
         ids = []
         for i in range(5):
-            mid = store.store(f"Memory {i}", f"Content {i}")
+            mid = _store(store, f"Memory {i}", f"Content {i}")
             ids.append(mid)
             time.sleep(0.01)  # Ensure distinct timestamps
 
@@ -130,7 +169,7 @@ class TestTimeline:
 
     def test_timeline_pagination(self, store):
         for i in range(5):
-            store.store(f"Memory {i}", f"Content {i}")
+            _store(store, f"Memory {i}", f"Content {i}")
             time.sleep(0.01)
 
         page1 = store.timeline(k=3)
@@ -144,7 +183,7 @@ class TestTimeline:
     def test_timeline_before_after(self, store):
         ids = []
         for i in range(5):
-            mid = store.store(f"Memory {i}", f"Content {i}")
+            mid = _store(store, f"Memory {i}", f"Content {i}")
             ids.append(mid)
             time.sleep(0.01)
 
@@ -156,7 +195,7 @@ class TestTimeline:
         assert all(item.updated_at >= mid_ts for item in result.items)
 
     def test_timeline_excludes_old_versions(self, store):
-        mid1 = store.store("Original", "Content")
+        mid1 = _store(store, "Original", "Content")
         mid2 = store.update(mid1, title="Updated")
 
         result = store.timeline(k=10)
@@ -165,7 +204,7 @@ class TestTimeline:
         assert mid1 not in ids
 
     def test_timeline_include_deleted(self, store):
-        mid = store.store("To Delete", "Content")
+        mid = _store(store, "To Delete", "Content")
         store.delete(mid)
 
         result = store.timeline(include_deleted=False)
@@ -179,7 +218,7 @@ class TestTimeline:
 
 class TestVersioning:
     def test_history_shows_all_versions(self, store):
-        mid1 = store.store("V1", "Content v1")
+        mid1 = _store(store, "V1", "Content v1")
         mid2 = store.update(mid1, title="V2", content="Content v2")
         mid3 = store.update(mid2, title="V3", content="Content v3")
         mid4 = store.update(mid3, title="V4", content="Content v4")
@@ -190,7 +229,7 @@ class TestVersioning:
         assert history[-1].version == 1
 
     def test_history_from_any_version(self, store):
-        mid1 = store.store("V1", "Content v1")
+        mid1 = _store(store, "V1", "Content v1")
         mid2 = store.update(mid1, title="V2")
         mid3 = store.update(mid2, title="V3")
 
@@ -201,7 +240,7 @@ class TestVersioning:
         assert len(h1) == len(h2) == len(h3) == 3
 
     def test_old_versions_not_in_search(self, store):
-        mid1 = store.store("Unique Searchable Alpha", "Alpha content")
+        mid1 = _store(store, "Unique Searchable Alpha", "Alpha content")
         mid2 = store.update(mid1, title="Unique Searchable Beta")
 
         results = store.search("Unique Searchable")
@@ -212,8 +251,8 @@ class TestVersioning:
 
 class TestLinks:
     def test_link_and_related(self, store):
-        mid_a = store.store("Memory A", "Content A")
-        mid_b = store.store("Memory B", "Content B")
+        mid_a = _store(store, "Memory A", "Content A")
+        mid_b = _store(store, "Memory B", "Content B")
 
         result = store.link(mid_a, mid_b)
         assert result["status"] == "ok"
@@ -227,8 +266,8 @@ class TestLinks:
         assert related_b[0].id == mid_a
 
     def test_unlink(self, store):
-        mid_a = store.store("Memory A", "Content A")
-        mid_b = store.store("Memory B", "Content B")
+        mid_a = _store(store, "Memory A", "Content A")
+        mid_b = _store(store, "Memory B", "Content B")
         store.link(mid_a, mid_b)
 
         store.unlink(mid_a, mid_b)
@@ -236,8 +275,8 @@ class TestLinks:
         assert store.related(mid_b) == []
 
     def test_link_migration_on_update(self, store):
-        mid_a = store.store("Memory A", "Content A")
-        mid_b = store.store("Memory B", "Content B")
+        mid_a = _store(store, "Memory A", "Content A")
+        mid_b = _store(store, "Memory B", "Content B")
         store.link(mid_a, mid_b)
 
         mid_a2 = store.update(mid_a, title="Memory A Updated")
@@ -247,9 +286,9 @@ class TestLinks:
         assert related[0].id == mid_b
 
     def test_link_count_in_search(self, store):
-        mid_a = store.store("Memory A Links", "Content A")
-        mid_b = store.store("Memory B Links", "Content B")
-        mid_c = store.store("Memory C Links", "Content C")
+        mid_a = _store(store, "Memory A Links", "Content A")
+        mid_b = _store(store, "Memory B Links", "Content B")
+        mid_c = _store(store, "Memory C Links", "Content C")
         store.link(mid_a, mid_b)
         store.link(mid_a, mid_c)
 
@@ -259,7 +298,7 @@ class TestLinks:
         assert a_result.link_count == 2
 
     def test_link_nonexistent(self, store):
-        mid = store.store("Real", "Content")
+        mid = _store(store, "Real", "Content")
         result = store.link(mid, "nonexistent-id")
         assert "error" in result
 
@@ -283,7 +322,7 @@ class TestValidation:
 
 class TestDeduplication:
     def test_exact_duplicate_rejected(self, store):
-        store.store("Unique Memory Title", "Unique memory content here")
+        _store(store, "Unique Memory Title", "Unique memory content here")
         result = store.store("Unique Memory Title", "Unique memory content here")
         assert isinstance(result, dict)
         assert "error" in result
@@ -292,32 +331,33 @@ class TestDeduplication:
     def test_near_duplicate_rejected(self, store):
         """With mock embeddings, only identical text produces identical vectors.
         Real model would catch paraphrases too."""
-        store.store("Identical title and content", "Identical body text here")
+        _store(store, "Identical title and content", "Identical body text here")
         # Slightly different title but same content triggers dedup via content similarity
-        result = store.store("Identical title and content", "Identical body text here plus extra")
+        store.store("Identical title and content", "Identical body text here plus extra")
         # Mock embeddings won't catch this since text differs; test exact match instead
         result = store.store("Identical title and content", "Identical body text here")
         assert isinstance(result, dict)
         assert "error" in result
 
     def test_different_content_allowed(self, store):
-        mid1 = store.store("Python debugging tips", "Use pdb for debugging")
-        mid2 = store.store("Rust ownership model explained", "Rust uses ownership for memory safety")
-        assert isinstance(mid1, str)
-        assert isinstance(mid2, str)
-        assert mid1 != mid2
+        result1 = store.store("Python debugging tips", "Use pdb for debugging")
+        result2 = store.store("Rust ownership model explained", "Rust uses ownership for memory safety")
+        assert "id" in result1
+        assert "id" in result2
+        assert result1["id"] != result2["id"]
 
     def test_force_bypasses_dedup(self, store):
-        store.store("Exact same title", "Exact same content")
+        _store(store, "Exact same title", "Exact same content")
         result = store.store("Exact same title", "Exact same content", force=True)
-        assert isinstance(result, str)  # Should succeed
+        assert isinstance(result, dict)
+        assert "id" in result  # Should succeed
 
 
 class TestDeletionSafeguards:
     def test_rate_limit(self, store):
         ids = []
         for i in range(MAX_DELETIONS_PER_SESSION + 1):
-            mid = store.store(f"Delete Me {i}", f"Content {i}")
+            mid = _store(store, f"Delete Me {i}", f"Content {i}")
             ids.append(mid)
 
         for i in range(MAX_DELETIONS_PER_SESSION):
@@ -330,7 +370,7 @@ class TestDeletionSafeguards:
         assert "limit" in result["error"].lower()
 
     def test_delete_removes_from_embedding_index(self, store):
-        mid = store.store("Findable", "Some content")
+        mid = _store(store, "Findable", "Some content")
 
         # Should be in search
         results = store.search("Findable")
@@ -343,7 +383,7 @@ class TestDeletionSafeguards:
         assert not any(r.id == mid for r in results)
 
     def test_undelete_reinserts_embedding(self, store):
-        mid = store.store("Findable Again", "Some content")
+        mid = _store(store, "Findable Again", "Some content")
         store.delete(mid)
         store.undelete(mid)
 
@@ -353,8 +393,8 @@ class TestDeletionSafeguards:
 
 class TestExportImport:
     def test_round_trip(self, store, db):
-        mid1 = store.store("Export A", "Content A")
-        mid2 = store.store("Export B", "Content B")
+        mid1 = _store(store, "Export A", "Content A")
+        mid2 = _store(store, "Export B", "Content B")
         store.link(mid1, mid2)
 
         data = store.export_all()
@@ -371,7 +411,7 @@ class TestExportImport:
         assert mem.title == "Export A"
 
     def test_import_skip_existing(self, store):
-        mid = store.store("Existing", "Content")
+        _store(store, "Existing", "Content")
         data = store.export_all()
 
         result = store.import_data(data, overwrite=False)
@@ -380,13 +420,13 @@ class TestExportImport:
 
 class TestStats:
     def test_stats_counts(self, store):
-        mid1 = store.store("A", "Content A")
-        mid2 = store.store("B", "Content B")
+        mid1 = _store(store, "A", "Content A")
+        mid2 = _store(store, "B", "Content B")
         store.link(mid1, mid2)
 
         mid1_v2 = store.update(mid1, title="A Updated")
-        store.store("C", "Content C")
-        mid_del = store.store("D", "Content D")
+        _store(store, "C", "Content C")
+        mid_del = _store(store, "D", "Content D")
         store.delete(mid_del)
 
         stats = store.stats()

@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from claude_crowed.config import (
+    DEFAULT_LINK_SUGGEST_K,
+    DEFAULT_RECALL_READ_K,
     DEFAULT_SEARCH_K,
     DEFAULT_TIMELINE_K,
     DUPLICATE_SIMILARITY_THRESHOLD,
@@ -108,6 +110,26 @@ class MemoryStore:
             )
         return results
 
+    def recall(
+        self,
+        query: str,
+        k: int = DEFAULT_SEARCH_K,
+        read_k: int = DEFAULT_RECALL_READ_K,
+        include_deleted: bool = False,
+    ) -> dict:
+        """Search and auto-read top results in one call."""
+        results = self.search(query, k=k, include_deleted=include_deleted)
+        read_results = []
+        for r in results[:read_k]:
+            full = self.read(r.id)
+            if isinstance(full, MemoryFull):
+                read_results.append(full.model_dump())
+        remaining = [r.model_dump() for r in results[read_k:]]
+        return {
+            "memories": read_results,
+            "also_matched": remaining,
+        }
+
     def read(self, memory_id: str) -> MemoryFull | dict:
         mem = self.db.execute(
             "SELECT * FROM memories WHERE id = ?", (memory_id,)
@@ -190,6 +212,43 @@ class MemoryStore:
                 }
         return None
 
+    def _suggest_links(
+        self,
+        embedding: list[float],
+        exclude_id: str,
+        k: int = DEFAULT_LINK_SUGGEST_K,
+    ) -> list[dict]:
+        """Find nearest neighbors as link candidates for a newly stored memory."""
+        rows = self.db.execute(
+            """
+            SELECT id, distance
+            FROM memory_embeddings
+            WHERE embedding MATCH ?
+                AND k = ?
+            ORDER BY distance
+            """,
+            (serialize_embedding(embedding), k + 1),
+        ).fetchall()
+
+        suggestions = []
+        for row in rows:
+            mid = row[0]
+            if mid == exclude_id:
+                continue
+            mem = self.db.execute(
+                "SELECT id, title FROM memories WHERE id = ? AND is_deleted = 0",
+                (mid,),
+            ).fetchone()
+            if mem:
+                suggestions.append({
+                    "id": mem["id"],
+                    "title": mem["title"],
+                    "similarity": round(1.0 - row[1], 4),
+                })
+            if len(suggestions) >= k:
+                break
+        return suggestions
+
     def store(
         self,
         title: str,
@@ -235,7 +294,10 @@ class MemoryStore:
             (memory_id, serialize_embedding(embedding)),
         )
         self.db.commit()
-        return memory_id
+
+        # Suggest related memories for linking
+        link_suggestions = self._suggest_links(embedding, exclude_id=memory_id)
+        return {"id": memory_id, "link_suggestions": link_suggestions}
 
     def update(
         self,

@@ -10,6 +10,7 @@ from claude_crowed.backup import create_backup, restore_backup
 from claude_crowed.config import (
     BACKUP_DIR,
     DB_PATH,
+    DEFAULT_RECALL_READ_K,
     DEFAULT_SEARCH_K,
     DEFAULT_TIMELINE_K,
     EXPORT_DIR,
@@ -62,9 +63,11 @@ def memory_search(
     k: int = DEFAULT_SEARCH_K,
     include_deleted: bool = False,
 ) -> list[dict] | dict:
-    """Search your persistent memory. Call this at the START of every task with relevant
-    keywords. Returns titles and metadata only -- use memory_read to fetch full content
-    of the few results that look relevant (usually 1-5). Do not skip this step."""
+    """Search your persistent memory. Call this at the START of every task AND whenever you
+    encounter unfamiliar territory mid-task. Returns titles and metadata only -- use
+    memory_read to fetch full content of the few results that look relevant (usually 1-5).
+    For a faster workflow, use memory_recall instead (combines search + read in one call).
+    Do not skip the initial search step."""
     try:
         store = _get_store()
         results = store.search(query, k=k, include_deleted=include_deleted)
@@ -90,6 +93,29 @@ def memory_read(id: str) -> dict:
 
 
 @mcp.tool()
+def memory_recall(
+    query: str,
+    k: int = DEFAULT_SEARCH_K,
+    read_k: int = DEFAULT_RECALL_READ_K,
+    include_deleted: bool = False,
+) -> dict:
+    """Search memory and return full content for the top results in a single call.
+    Use this instead of memory_search + memory_read to reduce round trips.
+
+    Returns two lists:
+    - memories: full content for the top read_k results (default 5)
+    - also_matched: titles only for remaining results (for follow-up reads if needed)
+
+    Call this at the START of every task AND whenever you hit unfamiliar territory mid-task."""
+    try:
+        store = _get_store()
+        return store.recall(query, k=k, read_k=read_k, include_deleted=include_deleted)
+    except Exception as e:
+        logger.error("memory_recall failed", exc_info=True)
+        return {"error": f"Recall failed: {e}"}
+
+
+@mcp.tool()
 def memory_store(
     title: str,
     content: str,
@@ -102,14 +128,15 @@ def memory_store(
     instance of you should judge relevance from the title alone. Content max 1500 chars;
     split larger ideas into multiple linked memories. Source: manual, conversation, or auto.
 
+    Returns the new memory ID and link_suggestions (nearest existing memories). Review
+    the suggestions and call memory_link for any that are related -- building a rich link
+    graph improves future retrieval.
+
     Rejects near-duplicates by default (use memory_threshold to view/adjust sensitivity).
     Set force=True to skip the duplicate check entirely."""
     try:
         store = _get_store()
-        result = store.store(title=title, content=content, source=source, force=force)
-        if isinstance(result, dict):
-            return result
-        return {"id": result}
+        return store.store(title=title, content=content, source=source, force=force)
     except Exception as e:
         logger.error("memory_store failed", exc_info=True)
         return {"error": f"Store failed: {e}"}

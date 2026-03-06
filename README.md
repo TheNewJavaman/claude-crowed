@@ -43,10 +43,14 @@ Then add the memory directive to your `~/.claude/CLAUDE.md` so Claude knows to u
 You have access to a persistent memory system via MCP tools (server: claude-crowed).
 This is your primary knowledge store.
 
-### Always Do
-- At the START of any task, call `memory_search` with relevant keywords.
-- After completing a task that produced a novel insight, decision, or finding, call `memory_store`.
-- When you learn something worth remembering across sessions, store it immediately.
+### Search Discipline
+- At the START of every task, call `memory_recall` (or `memory_search`) with relevant keywords.
+- Mid-task: whenever you encounter unfamiliar code, patterns, or errors, search again.
+- After completing a task that produced a novel insight, call `memory_store`.
+
+### Linking
+- After storing a memory, review the `link_suggestions` in the response.
+  Call `memory_link` for any that are related.
 ```
 
 ## Usage
@@ -57,7 +61,8 @@ This is your primary knowledge store.
 |---|---|
 | `memory_search` | Semantic search, returns titles only |
 | `memory_read` | Fetch full content of a memory |
-| `memory_store` | Store a new memory (with dedup check) |
+| `memory_recall` | Search + read top results in one call (fewer round trips) |
+| `memory_store` | Store a new memory (with dedup check, returns link suggestions) |
 | `memory_update` | Create a new version of a memory |
 | `memory_delete` | Soft-delete (rate-limited, reversible) |
 | `memory_undelete` | Restore a deleted memory |

@@ -30,20 +30,21 @@ uv run claude-crowed rebuild-embeddings
 
 ## Architecture
 
-MCP server exposing 16 tools for persistent semantic memory. Claude stores/retrieves knowledge across sessions via these tools.
+MCP server exposing 17 tools for persistent semantic memory. Claude stores/retrieves knowledge across sessions via these tools.
 
 ### Data Flow
 
-1. **Store**: Text → `embed_document("search_document: {title}\n{content}")` → 768-dim vector → SQLite + sqlite-vec
+1. **Store**: Text → `embed_document("search_document: {title}\n{content}")` → 768-dim vector → SQLite + sqlite-vec. Returns `{id, link_suggestions}` — nearest neighbors to encourage linking.
 2. **Search**: Query → `embed_query("search_query: {query}")` → vec0 `MATCH` → ranked results (titles only)
 3. **Read**: Fetch full content by ID (only tool that bumps `last_accessed_at`)
+4. **Recall**: Combines search + read in one call. Returns full content for top-k results + titles for the rest. Preferred over search+read for fewer round trips.
 
 The `search_document:`/`search_query:` prefixes are required by the nomic-embed-text-v1.5 model.
 
 ### Key Modules
 
 - **`server.py`** — FastMCP tool definitions + CLI entry point. Tools are thin wrappers around `MemoryStore` methods. `_init_server()` starts background model loading, creates DB, takes startup backup.
-- **`memory_store.py`** — Core CRUD, search, versioning, links, import/export. All business logic lives here. Methods return Pydantic models or `dict` with `"error"` key on failure.
+- **`memory_store.py`** — Core CRUD, search, recall, versioning, links, import/export. All business logic lives here. `store()` always returns a dict (`{id, link_suggestions}` on success, `{error}` on failure). Other methods return Pydantic models or `dict` with `"error"` key on failure.
 - **`embedding.py`** — Lazy model loading in a background thread (`start_loading()` + `threading.Event`). Model loads during MCP handshake so first tool call doesn't block. CPU-only by default.
 - **`db.py`** — Schema definition, `get_connection()` loads sqlite-vec extension. WAL mode, foreign keys enabled.
 - **`models.py`** — Pydantic response models.
