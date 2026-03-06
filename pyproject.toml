@@ -1,0 +1,27 @@
+[project]
+name = "claude-crowed"
+version = "0.1.0"
+description = "Persistent semantic memory system for Claude Code"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+    "mcp[cli]",
+    "sqlite-vec",
+    "sentence-transformers>=3.0",
+    "torch",
+    "einops",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[project.scripts]
+claude-crowed = "claude_crowed.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,0 +1,16 @@
+from pathlib import Path
+
+MAX_TITLE_LENGTH = 150
+MAX_CONTENT_LENGTH = 1500
+EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5"
+EMBEDDING_DIMENSION = 768
+DEFAULT_SEARCH_K = 20
+DEFAULT_TIMELINE_K = 20
+MAX_BACKUP_COUNT = 30
+MAX_DELETIONS_PER_SESSION = 5
+DUPLICATE_SIMILARITY_THRESHOLD = 0.85
+
+DB_DIR = Path("~/.local/share/claude-crowed").expanduser()
+DB_PATH = DB_DIR / "memories.db"
+BACKUP_DIR = DB_DIR / "backups"
+EXPORT_DIR = DB_DIR / "exports"
