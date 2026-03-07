@@ -29,15 +29,23 @@ claude mcp add --scope user claude-crowed -- uv run --directory /path/to/claude-
 
 Then add the memory directive to your `~/.claude/CLAUDE.md` so Claude knows to use it.
 
-The core principle is **search before work, store after insight** — this prevents
-repeating expensive operations like codebase exploration and web research across sessions.
+The core principle is that crowed is a **memoization layer** for Claude Code. Every
+piece of knowledge, research, implementation detail, design decision, open question,
+or idea should flow through crowed so that future sessions can skip the work entirely.
+Before you think, search. Before you conclude, store. If a prior session already
+figured something out, reuse it — don't re-derive it.
 
 ```markdown
 ## Memory System (claude-crowed)
 
 You have access to a persistent memory system via MCP tools (server: claude-crowed).
-This is your primary knowledge store — use it instead of accumulating knowledge in
-this file or auto-memory files.
+**This is your memoization layer.** The whole point is to avoid repetitive work and
+thinking across sessions. Every piece of knowledge, research, implementation detail,
+design decision, open question, or idea that you produce should flow through crowed
+so that future sessions can skip the work entirely.
+
+Think of crowed as a cache: before you think, search. Before you conclude, store.
+If a prior session already figured something out, reuse it — don't re-derive it.
 
 ### Search Discipline
 - At the **START** of every task, call `memory_recall` (or `memory_search`) with relevant keywords.
@@ -47,23 +55,28 @@ this file or auto-memory files.
 - **Before expensive work**: always search before launching an Explore agent, doing
   multi-file Grep/Glob sweeps, or calling WebSearch/WebFetch. A prior session may have
   already answered the question — skip the work if it has.
+- **Before forming a plan**: search for prior plans, design decisions, or rejected
+  approaches. Don't re-propose something that was already tried and failed.
 - Use `memory_recall` to combine search + read in one call (fewer round trips).
   Use `memory_search` + `memory_read` when you need finer control.
 
 ### When to Store
-- **After diagnosing a root cause**: any time you explain *why* something doesn't work,
-  that explanation is a memory. "The problem was X because Y" is always worth storing.
+Store **anything** a future session might need. If you thought about it, researched it,
+or figured it out, it belongs in crowed. Specific triggers:
+
+- **After diagnosing a root cause**: "The problem was X because Y" is always worth storing.
 - **When you discover a gotcha or workaround**: non-obvious behavior, API quirks,
   config footguns — things that would cost a future session time to rediscover.
 - **After codebase exploration**: when you map out how a module, feature, or subsystem works,
-  store the finding. Frame it as the question a future session would ask
-  (e.g., "Auth module: JWT flow through middleware → handler → token_store").
-- **After web research**: when a WebSearch/WebFetch answers a question, store the
-  *actionable conclusion* — not the URL. URLs rot; the insight doesn't.
-- **After a user correction**: if the user says "we don't do X here, use Y", store it
-  immediately — it prevents the same wrong suggestion in every future session.
-- **After every git commit**: store memories for novel decisions, patterns, or architecture
-  introduced in that commit. The commit is a natural breakpoint — don't skip it.
+  store the finding. Frame it as the question a future session would ask.
+- **After web research**: store the *actionable conclusion* — not the URL.
+- **After a user correction**: store it immediately — prevents the same wrong suggestion next time.
+- **After every git commit**: store novel decisions, patterns, or architecture.
+- **When you form an implementation plan**: store the plan, the alternatives considered,
+  and why you chose this approach. Future sessions shouldn't re-derive the same plan.
+- **When you have an open question or idea**: store it so it's not lost between sessions.
+- **When you read and understand a complex code path**: store the summary. Reading code
+  is expensive — don't make the next session re-read and re-understand the same thing.
 - **Don't batch**: store as you go, not at the end. Mid-task insights are the most valuable
   and the easiest to forget.
 
@@ -74,9 +87,10 @@ this file or auto-memory files.
 - Prefer creating NEW memories over updating existing ones unless refining the same idea.
 
 ### Do NOT
-- Accumulate knowledge in this file or in auto-memory files.
+- Accumulate knowledge in this file or in auto-memory files. Crowed is the single source of truth.
 - Fetch all search results — be selective (usually 1-5).
 - Delegate memory_store to a subagent.
+- Re-derive something that crowed already knows. Search first, always.
 ```
 
 ## Usage

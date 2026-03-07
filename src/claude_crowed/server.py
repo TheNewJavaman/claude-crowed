@@ -71,7 +71,7 @@ def memory_search(
     try:
         store = _get_store()
         results = store.search(query, k=k, include_deleted=include_deleted)
-        return [r.model_dump() for r in results]
+        return [{"id": r.id, "title": r.title, "similarity": r.similarity} for r in results]
     except Exception as e:
         logger.error("memory_search failed", exc_info=True)
         return {"error": f"Search failed: {e}"}
@@ -86,7 +86,7 @@ def memory_read(id: str) -> dict:
         result = store.read(id)
         if isinstance(result, dict):
             return result
-        return result.model_dump()
+        return {"id": result.id, "title": result.title, "content": result.content}
     except Exception as e:
         logger.error("memory_read failed", exc_info=True)
         return {"error": f"Read failed: {e}"}
@@ -189,7 +189,7 @@ def memory_history(id: str) -> list[dict] | dict:
         result = store.history(id)
         if isinstance(result, dict):
             return result
-        return [v.model_dump() for v in result]
+        return [{"id": v.id, "version": v.version, "title": v.title, "content": v.content} for v in result]
     except Exception as e:
         logger.error("memory_history failed", exc_info=True)
         return {"error": f"History failed: {e}"}
@@ -210,7 +210,10 @@ def memory_timeline(
         result = store.timeline(
             k=k, cursor=cursor, before=before, after=after, include_deleted=include_deleted
         )
-        return result.model_dump()
+        return {
+            "items": [{"id": item.id, "title": item.title, "updated_at": item.updated_at} for item in result.items],
+            "next_cursor": result.next_cursor,
+        }
     except Exception as e:
         logger.error("memory_timeline failed", exc_info=True)
         return {"error": f"Timeline failed: {e}"}
@@ -224,7 +227,7 @@ def memory_related(id: str, k: int = 5) -> list[dict] | dict:
         result = store.related(id, k=k)
         if isinstance(result, dict):
             return result
-        return [r.model_dump() for r in result]
+        return [{"id": r.id, "title": r.title} for r in result]
     except Exception as e:
         logger.error("memory_related failed", exc_info=True)
         return {"error": f"Related failed: {e}"}

@@ -116,8 +116,8 @@ class MemoryStore:
         for r in results[:read_k]:
             full = self.read(r.id)
             if isinstance(full, MemoryFull):
-                read_results.append(full.model_dump())
-        remaining = [r.model_dump() for r in results[read_k:]]
+                read_results.append({"id": full.id, "title": full.title, "content": full.content})
+        remaining = [{"id": r.id, "title": r.title} for r in results[read_k:]]
         return {
             "memories": read_results,
             "also_matched": remaining,
