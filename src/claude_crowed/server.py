@@ -58,26 +58,6 @@ def _init_server() -> None:
 
 
 @mcp.tool()
-def memory_search(
-    query: str,
-    k: int = DEFAULT_SEARCH_K,
-    include_deleted: bool = False,
-) -> list[dict] | dict:
-    """Search your persistent memory. Call this at the START of every task AND whenever you
-    encounter unfamiliar territory mid-task. Returns titles and metadata only -- use
-    memory_read to fetch full content of the few results that look relevant (usually 1-5).
-    For a faster workflow, use memory_recall instead (combines search + read in one call).
-    Do not skip the initial search step."""
-    try:
-        store = _get_store()
-        results = store.search(query, k=k, include_deleted=include_deleted)
-        return [{"id": r.id, "title": r.title, "similarity": r.similarity} for r in results]
-    except Exception as e:
-        logger.error("memory_search failed", exc_info=True)
-        return {"error": f"Search failed: {e}"}
-
-
-@mcp.tool()
 def memory_read(id: str) -> dict:
     """Fetch the full content of a specific memory. This is the only tool that returns
     content. Each read is tracked in the memory_accesses table."""

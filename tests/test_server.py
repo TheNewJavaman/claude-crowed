@@ -35,15 +35,6 @@ def test_memory_read_tool():
     assert result["content"] == "Content for reading"
 
 
-def test_memory_search_tool():
-    server.memory_store("Python Tips", "Use list comprehensions")
-    server.memory_store("Rust Tips", "Use pattern matching")
-
-    results = server.memory_search("Python")
-    assert isinstance(results, list)
-    assert len(results) > 0
-
-
 def test_memory_update_tool():
     stored = server.memory_store("Original", "Original content")
     updated = server.memory_update(stored["id"], title="Updated")
