@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS memories (
     content TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    last_accessed_at TEXT NOT NULL,
     is_deleted INTEGER NOT NULL DEFAULT 0,
     parent_id TEXT,
     source TEXT NOT NULL DEFAULT 'manual',
@@ -30,9 +29,16 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS memory_accesses (
+    memory_id TEXT NOT NULL,
+    accessed_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at);
 CREATE INDEX IF NOT EXISTS idx_memories_deleted ON memories(is_deleted);
 CREATE INDEX IF NOT EXISTS idx_memories_parent ON memories(parent_id);
+CREATE INDEX IF NOT EXISTS idx_accesses_memory ON memory_accesses(memory_id);
+CREATE INDEX IF NOT EXISTS idx_accesses_at ON memory_accesses(accessed_at);
 """
 
 
@@ -58,4 +64,13 @@ def get_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
 def init_schema(db: sqlite3.Connection) -> None:
     """Initialize the database schema. Idempotent."""
     db.executescript(SCHEMA_SQL)
+
+    # Migration: drop last_accessed_at column if it exists
+    columns = {
+        row[1]
+        for row in db.execute("PRAGMA table_info(memories)").fetchall()
+    }
+    if "last_accessed_at" in columns:
+        db.execute("ALTER TABLE memories DROP COLUMN last_accessed_at")
+
     db.commit()

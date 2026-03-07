@@ -13,8 +13,8 @@ def tmp_db(tmp_path):
     db = get_connection(db_path)
     init_schema(db)
     db.execute(
-        "INSERT INTO memories (id, version, title, content, created_at, updated_at, last_accessed_at, source) "
-        "VALUES ('test-1', 1, 'Test', 'Content', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'manual')"
+        "INSERT INTO memories (id, version, title, content, created_at, updated_at, source) "
+        "VALUES ('test-1', 1, 'Test', 'Content', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'manual')"
     )
     db.commit()
     db.close()

@@ -80,7 +80,7 @@ def memory_search(
 @mcp.tool()
 def memory_read(id: str) -> dict:
     """Fetch the full content of a specific memory. This is the only tool that returns
-    content and the only tool that bumps last_accessed_at."""
+    content. Each read is tracked in the memory_accesses table."""
     try:
         store = _get_store()
         result = store.read(id)

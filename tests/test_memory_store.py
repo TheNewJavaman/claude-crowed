@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 
 import pytest
 
@@ -108,18 +109,34 @@ class TestSearch:
         ids = [r.id for r in results]
         assert mid2 in ids
 
-    def test_search_does_not_bump_last_accessed(self, store):
+    def test_read_tracks_access(self, store):
+        mid = _store(store, "Tracked", "Content")
+        before = datetime.now(timezone.utc)
+        store.read(mid)
+
+        rows = store.db.execute(
+            "SELECT memory_id, accessed_at FROM memory_accesses WHERE memory_id = ?",
+            (mid,),
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["memory_id"] == mid
+        accessed = datetime.fromisoformat(rows[0]["accessed_at"].replace("Z", "+00:00"))
+        assert accessed >= before
+
+    def test_search_does_not_track_access(self, store):
         mid = _store(store, "Test", "Content")
-        mem_before = store.read(mid)
-        time.sleep(0.01)
+        # Read once to create an access record
+        store.read(mid)
+        count_before = store.db.execute(
+            "SELECT COUNT(*) as cnt FROM memory_accesses WHERE memory_id = ?", (mid,)
+        ).fetchone()["cnt"]
 
         store.search("Test")
-        # Read again to check — read bumps last_accessed, so compare with initial
-        mem = store.db.execute(
-            "SELECT last_accessed_at FROM memories WHERE id = ?", (mid,)
-        ).fetchone()
-        # last_accessed was bumped by the read above, but search should not bump further
-        assert mem["last_accessed_at"] == mem_before.last_accessed_at
+
+        count_after = store.db.execute(
+            "SELECT COUNT(*) as cnt FROM memory_accesses WHERE memory_id = ?", (mid,)
+        ).fetchone()["cnt"]
+        assert count_after == count_before
 
 
 class TestRecall:

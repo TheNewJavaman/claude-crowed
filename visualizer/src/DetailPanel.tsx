@@ -186,10 +186,6 @@ export default function DetailPanel({
           <div style={{ marginBottom: 16 }}>
             <MetaRow label="Created" value={formatDate(memory.created_at)} />
             <MetaRow label="Updated" value={formatDate(memory.updated_at)} />
-            <MetaRow
-              label="Accessed"
-              value={formatDate(memory.last_accessed_at)}
-            />
             <MetaRow label="ID" value={memory.id} mono />
           </div>
 

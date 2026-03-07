@@ -42,7 +42,7 @@ MCP server exposing 14 tools for persistent semantic memory. Claude stores/retri
 
 1. **Store**: Text → `embed_document("search_document: {title}\n{content}")` → 768-dim vector → SQLite + sqlite-vec. Returns `{id}`.
 2. **Search**: Query → `embed_query("search_query: {query}")` → vec0 `MATCH` → ranked results (titles only)
-3. **Read**: Fetch full content by ID (only tool that bumps `last_accessed_at`)
+3. **Read**: Fetch full content by ID (each read is tracked in the `memory_accesses` table)
 4. **Recall**: Combines search + read in one call. Returns full content for top-k results + titles for the rest. Preferred over search+read for fewer round trips.
 5. **Related**: Finds semantically similar memories via embedding nearest-neighbor lookup (dynamic, no stored links).
 

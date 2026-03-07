@@ -7,7 +7,6 @@ class MemorySearchResult(BaseModel):
     similarity: float
     created_at: str
     updated_at: str
-    last_accessed_at: str
     is_deleted: bool
 
 
@@ -18,7 +17,6 @@ class MemoryFull(BaseModel):
     content: str
     created_at: str
     updated_at: str
-    last_accessed_at: str
     source: str
     is_deleted: bool
 
@@ -36,7 +34,6 @@ class TimelineItem(BaseModel):
     title: str
     created_at: str
     updated_at: str
-    last_accessed_at: str
     is_deleted: bool
 
 
@@ -49,7 +46,6 @@ class RelatedMemory(BaseModel):
     id: str
     title: str
     updated_at: str
-    last_accessed_at: str
 
 
 class ExportData(BaseModel):

@@ -27,7 +27,6 @@ export interface MemoryFull {
   content: string
   created_at: string
   updated_at: string
-  last_accessed_at: string
   source: string
   is_deleted: boolean
 }

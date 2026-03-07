@@ -97,7 +97,6 @@ class MemoryStore:
                     similarity=1.0 - distance,
                     created_at=mem["created_at"],
                     updated_at=mem["updated_at"],
-                    last_accessed_at=mem["last_accessed_at"],
                     is_deleted=bool(mem["is_deleted"]),
                 )
             )
@@ -132,8 +131,8 @@ class MemoryStore:
 
         now = now_utc()
         self.db.execute(
-            "UPDATE memories SET last_accessed_at = ? WHERE id = ?",
-            (now, memory_id),
+            "INSERT INTO memory_accesses (memory_id, accessed_at) VALUES (?, ?)",
+            (memory_id, now),
         )
         self.db.commit()
 
@@ -144,7 +143,6 @@ class MemoryStore:
             content=mem["content"],
             created_at=mem["created_at"],
             updated_at=mem["updated_at"],
-            last_accessed_at=now,
             source=mem["source"],
             is_deleted=bool(mem["is_deleted"]),
         )
@@ -218,10 +216,10 @@ class MemoryStore:
 
         self.db.execute(
             """
-            INSERT INTO memories (id, version, title, content, created_at, updated_at, last_accessed_at, is_deleted, parent_id, source)
-            VALUES (?, 1, ?, ?, ?, ?, ?, 0, NULL, ?)
+            INSERT INTO memories (id, version, title, content, created_at, updated_at, is_deleted, parent_id, source)
+            VALUES (?, 1, ?, ?, ?, ?, 0, NULL, ?)
             """,
-            (memory_id, title, content, now, now, now, source),
+            (memory_id, title, content, now, now, source),
         )
         self.db.execute(
             "INSERT INTO memory_embeddings (id, embedding) VALUES (?, ?)",
@@ -263,8 +261,8 @@ class MemoryStore:
 
         self.db.execute(
             """
-            INSERT INTO memories (id, version, title, content, created_at, updated_at, last_accessed_at, is_deleted, parent_id, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            INSERT INTO memories (id, version, title, content, created_at, updated_at, is_deleted, parent_id, source)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
             """,
             (
                 new_id,
@@ -272,7 +270,6 @@ class MemoryStore:
                 new_title,
                 new_content,
                 old["created_at"],
-                now,
                 now,
                 memory_id,
                 old["source"],
@@ -442,7 +439,6 @@ class MemoryStore:
                 title=r["title"],
                 created_at=r["created_at"],
                 updated_at=r["updated_at"],
-                last_accessed_at=r["last_accessed_at"],
                 is_deleted=bool(r["is_deleted"]),
             )
             for r in rows
@@ -482,7 +478,7 @@ class MemoryStore:
             if mid == memory_id:
                 continue
             m = self.db.execute(
-                "SELECT id, title, updated_at, last_accessed_at FROM memories WHERE id = ? AND is_deleted = 0",
+                "SELECT id, title, updated_at FROM memories WHERE id = ? AND is_deleted = 0",
                 (mid,),
             ).fetchone()
             if m:
@@ -491,7 +487,6 @@ class MemoryStore:
                         id=m["id"],
                         title=m["title"],
                         updated_at=m["updated_at"],
-                        last_accessed_at=m["last_accessed_at"],
                     )
                 )
             if len(results) >= k:
@@ -530,8 +525,8 @@ class MemoryStore:
 
             self.db.execute(
                 """
-                INSERT INTO memories (id, version, title, content, created_at, updated_at, last_accessed_at, is_deleted, parent_id, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO memories (id, version, title, content, created_at, updated_at, is_deleted, parent_id, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     mem["id"],
@@ -540,7 +535,6 @@ class MemoryStore:
                     mem["content"],
                     mem["created_at"],
                     mem["updated_at"],
-                    mem["last_accessed_at"],
                     mem["is_deleted"],
                     mem.get("parent_id"),
                     mem.get("source", "manual"),
