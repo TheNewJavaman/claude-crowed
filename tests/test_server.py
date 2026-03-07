@@ -87,13 +87,6 @@ def test_memory_history_tool():
     assert len(history) == 2
 
 
-def test_memory_stats_tool():
-    server.memory_store("Stats Test", "Content")
-    result = server.memory_stats()
-    assert result["total_memories"] == 1
-    assert result["total_versions"] == 1
-
-
 def test_memory_read_not_found():
     result = server.memory_read("nonexistent-id")
     assert "error" in result

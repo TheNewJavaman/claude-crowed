@@ -128,7 +128,7 @@ def memory_store(
     instance of you should judge relevance from the title alone. Content max 1500 chars;
     split larger ideas into multiple memories. Source: manual, conversation, or auto.
 
-    Rejects near-duplicates by default (use memory_threshold to view/adjust sensitivity).
+    Rejects near-duplicates by default (threshold adjustable via `claude-crowed threshold` CLI).
     Set force=True to skip the duplicate check entirely."""
     try:
         store = _get_store()
@@ -234,54 +234,6 @@ def memory_related(id: str, k: int = 5) -> list[dict] | dict:
 
 
 @mcp.tool()
-def memory_export(path: str | None = None) -> dict:
-    """Export all memories (including deleted, all versions) to a JSON file."""
-    try:
-        store = _get_store()
-        data = store.export_all()
-
-        if path is None:
-            EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-            timestamp = now_utc().replace(":", "").replace("-", "")
-            export_path = EXPORT_DIR / f"crowed-export-{timestamp}.json"
-        else:
-            export_path = Path(path)
-            export_path.parent.mkdir(parents=True, exist_ok=True)
-
-        export_path.write_text(data.model_dump_json(indent=2))
-
-        return {
-            "path": str(export_path),
-            "memory_count": len(data.memories),
-        }
-    except Exception as e:
-        logger.error("memory_export failed", exc_info=True)
-        return {"error": f"Export failed: {e}"}
-
-
-@mcp.tool()
-def memory_import(path: str, overwrite: bool = False) -> dict:
-    """Import memories from a JSON export file. Set overwrite=True to clear the database
-    first (a backup will be created automatically)."""
-    try:
-        store = _get_store()
-        file_path = Path(path)
-        if not file_path.exists():
-            return {"error": f"File not found: {path}"}
-
-        raw = json.loads(file_path.read_text())
-        data = ExportData(**raw)
-
-        if overwrite and DB_PATH.exists():
-            create_backup(DB_PATH)
-
-        return store.import_data(data, overwrite=overwrite)
-    except Exception as e:
-        logger.error("memory_import failed", exc_info=True)
-        return {"error": f"Import failed: {e}"}
-
-
-@mcp.tool()
 def memory_migrate(path: str | None = None) -> dict:
     """Discover and read memory files (CLAUDE.md, auto-memory) for migration into crowed.
 
@@ -314,41 +266,6 @@ def memory_migrate(path: str | None = None) -> dict:
     except Exception as e:
         logger.error("memory_migrate failed", exc_info=True)
         return {"error": f"Migration scan failed: {e}"}
-
-
-@mcp.tool()
-def memory_threshold(value: float | None = None) -> dict:
-    """Get or adjust the duplicate similarity threshold used by memory_store.
-
-    Call with no arguments to see the current threshold. Pass a value (0.0-1.0)
-    to update it. Higher values are more permissive (only very similar content
-    is blocked); lower values are stricter.
-
-    Adjust this when you notice false positives (distinct memories being blocked)
-    or false negatives (duplicates getting through). Small increments (0.02-0.05)
-    are recommended."""
-    try:
-        store = _get_store()
-        if value is not None:
-            return store.set_similarity_threshold(value)
-        return {"similarity_threshold": store.get_similarity_threshold()}
-    except Exception as e:
-        logger.error("memory_threshold failed", exc_info=True)
-        return {"error": f"Threshold failed: {e}"}
-
-
-@mcp.tool()
-def memory_stats() -> dict:
-    """Return summary statistics about the memory store."""
-    try:
-        store = _get_store()
-        stats = store.stats()
-        if DB_PATH.exists():
-            stats.db_size_bytes = DB_PATH.stat().st_size
-        return stats.model_dump()
-    except Exception as e:
-        logger.error("memory_stats failed", exc_info=True)
-        return {"error": f"Stats failed: {e}"}
 
 
 # --- CLI ---
@@ -433,6 +350,18 @@ def cli_stats():
     print(f"Database size:    {stats.db_size_bytes:,} bytes")
 
 
+def cli_threshold(args):
+    store = _get_store()
+    if args.value is not None:
+        result = store.set_similarity_threshold(args.value)
+        if "error" in result:
+            print(result["error"], file=sys.stderr)
+            sys.exit(1)
+        print(f"Similarity threshold set to {args.value}")
+    else:
+        print(f"Similarity threshold: {store.get_similarity_threshold()}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="claude-crowed",
@@ -468,6 +397,10 @@ def main():
     # stats
     subparsers.add_parser("stats", help="Show memory statistics")
 
+    # threshold
+    threshold_parser = subparsers.add_parser("threshold", help="Get or set duplicate similarity threshold")
+    threshold_parser.add_argument("value", nargs="?", type=float, default=None)
+
     # visualize
     viz_parser = subparsers.add_parser("visualize", help="Launch web visualizer")
     viz_parser.add_argument("--port", type=int, default=4242)
@@ -492,6 +425,8 @@ def main():
         cli_rebuild_embeddings()
     elif args.command == "stats":
         cli_stats()
+    elif args.command == "threshold":
+        cli_threshold(args)
     elif args.command == "visualize":
         from claude_crowed.visualizer import run_visualizer
         run_visualizer(port=args.port, no_browser=args.no_browser)
